@@ -1,0 +1,55 @@
+# Cairo / Starknet
+target/
+.snfoundry_cache/
+scarb.lock
+*.sierra.json
+*.casm.json
+
+# Rust
+*.rs.bk
+Cargo.lock
+
+# Node / TypeScript
+node_modules/
+dist/
+build/
+.next/
+.turbo/
+*.tsbuildinfo
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+
+# Temp
+tmp/
+temp/
+*.tmp
+
+# Secrets
+.env.secret
+*.pem
+*.key
+secrets/
