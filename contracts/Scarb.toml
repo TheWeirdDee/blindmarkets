@@ -1,0 +1,20 @@
+[package]
+name = "blindmarkets_contracts"
+version = "1.0.0"
+edition = "2024_07"
+
+[lib]
+path = "src/lib.cairo"
+
+[dependencies]
+starknet = "2.16.0"
+
+[dev-dependencies]
+snforge_std = "0.56.0"
+
+[tool.scarb]
+allow-prebuilt-plugins = ["snforge_std"]
+
+[[target.starknet-contract]]
+sierra = true
+casm = true

@@ -1,0 +1,11 @@
+mod intent_registry;
+mod batch_auction;
+mod batch_settlement;
+mod solver_bond;
+mod gateway_registry;
+mod asset_registry;
+mod mock_account;
+mod mock_solver_bond;
+mod mock_proof_verifier;
+mod mock_erc20;
+mod mock_intent_registry;
