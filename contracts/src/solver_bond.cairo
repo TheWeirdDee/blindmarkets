@@ -68,7 +68,6 @@ mod SolverBond {
     use super::{ISolverBond, SolverInfo, SlashEvent};
     use super::{IERC20Dispatcher, IERC20DispatcherTrait};
     use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
-    use starknet::contract_address_const;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess
