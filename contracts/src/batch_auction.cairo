@@ -99,11 +99,11 @@ mod BatchAuction {
     use super::{IBatchAuction, Solution, Batch, BatchStatus};
     use super::{ISolverBondDispatcher, ISolverBondDispatcherTrait};
     use starknet::{ContractAddress, get_caller_address, get_block_timestamp};
-    use starknet::contract_address_const;
     use starknet::storage::{
         Map, StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess
     };
+    use core::traits::TryInto;
 
     #[storage]
     struct Storage {
@@ -189,6 +189,10 @@ mod BatchAuction {
         self.reputation_weight.write(reputation_weight);
     }
 
+    fn zero_address() -> ContractAddress {
+        0.try_into().unwrap()
+    }
+
     #[abi(embed_v0)]
     impl BatchAuctionImpl of IBatchAuction<ContractState> {
         fn create_batch(
@@ -211,7 +215,7 @@ mod BatchAuction {
                 close_time,
                 intent_count,
                 auction_deadline,
-                winning_solver: contract_address_const::<0>(),
+                winning_solver: zero_address(),
                 status: BatchStatus::AUCTION(()),
             };
 
@@ -305,7 +309,7 @@ mod BatchAuction {
                     reason: 'No solutions submitted',
                 });
 
-                return contract_address_const::<0>();
+                return zero_address();
             }
 
             let (winning_solver, winning_commitment) = self._select_winner(batch_id, solution_count);
@@ -390,7 +394,7 @@ mod BatchAuction {
             batch_id: felt252,
             solution_count: u32
         ) -> (ContractAddress, felt252) {
-            let mut best_solver = contract_address_const::<0>();
+            let mut best_solver = zero_address();
             let mut best_commitment: felt252 = 0;
             let mut best_score: u256 = 0;
             let mut best_fee: u16 = 10000;
