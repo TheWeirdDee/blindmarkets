@@ -39,6 +39,16 @@ trait ISolverBond<TContractState> {
     fn get_solver_info(self: @TContractState, solver: ContractAddress) -> SolverInfo;
     fn is_blacklisted(self: @TContractState, solver: ContractAddress) -> bool;
     fn get_minimum_bond(self: @TContractState) -> u256;
+
+    fn set_batch_auction_contract(
+        ref self: TContractState,
+        batch_auction_contract: ContractAddress
+    ) -> bool;
+
+    fn set_batch_settlement_contract(
+        ref self: TContractState,
+        batch_settlement_contract: ContractAddress
+    ) -> bool;
 }
 
 #[derive(Drop, Serde, starknet::Store)]
@@ -109,6 +119,8 @@ mod SolverBond {
         BondWithdrawn: BondWithdrawn,
         SolverSlashed: SolverSlashed,
         SolverBlacklisted: SolverBlacklisted,
+        BatchAuctionContractUpdated: BatchAuctionContractUpdated,
+        BatchSettlementContractUpdated: BatchSettlementContractUpdated,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -144,6 +156,18 @@ mod SolverBond {
     struct SolverBlacklisted {
         solver: ContractAddress,
         reason: felt252,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct BatchAuctionContractUpdated {
+        previous: ContractAddress,
+        updated: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct BatchSettlementContractUpdated {
+        previous: ContractAddress,
+        updated: ContractAddress,
     }
 
     #[constructor]
@@ -492,6 +516,48 @@ mod SolverBond {
         fn get_minimum_bond(self: @ContractState) -> u256 {
             self.minimum_bond.read()
         }
+
+        fn set_batch_auction_contract(
+            ref self: ContractState,
+            batch_auction_contract: ContractAddress
+        ) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin');
+
+            let current = self.batch_auction_contract.read();
+            assert(current == zero_address(), 'BATCH_AUCTION_ALREADY_SET');
+            assert(batch_auction_contract != zero_address(), 'INVALID_BATCH_AUCTION');
+
+            self.batch_auction_contract.write(batch_auction_contract);
+            self.emit(BatchAuctionContractUpdated {
+                previous: current,
+                updated: batch_auction_contract,
+            });
+            true
+        }
+
+        fn set_batch_settlement_contract(
+            ref self: ContractState,
+            batch_settlement_contract: ContractAddress
+        ) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin');
+
+            let current = self.batch_settlement_contract.read();
+            assert(current == zero_address(), 'BATCH_SETTLEMENT_ALREADY_SET');
+            assert(batch_settlement_contract != zero_address(), 'INVALID_BATCH_SETTLEMENT');
+
+            self.batch_settlement_contract.write(batch_settlement_contract);
+            self.emit(BatchSettlementContractUpdated {
+                previous: current,
+                updated: batch_settlement_contract,
+            });
+            true
+        }
+    }
+
+    fn zero_address() -> ContractAddress {
+        0.try_into().unwrap()
     }
 
     #[generate_trait]

@@ -22,6 +22,7 @@ trait IIntentRegistry<TContractState> {
         asset_out: ContractAddress,
         amount_commitment: felt252,
         min_output: u256,
+        max_fee_bps: u16,
         deadline: u64,
         privacy_mode: u8,
         user_signature: Span<felt252>
@@ -235,6 +236,7 @@ fn test_end_to_end_intent_flow() {
     let signature = array![1, 2].span();
     let amount_commitment: felt252 = 0xA1;
     let min_output: u256 = 1000000_u256;
+    let max_fee_bps: u16 = 50;
     let deadline: u64 = 2000;
     let privacy_mode: u8 = 1;
     let nonce: felt252 = 0xBEEF;
@@ -243,6 +245,7 @@ fn test_end_to_end_intent_flow() {
     intent_hash = core::pedersen::pedersen(intent_hash, amount_commitment);
     let min_output_hash = core::pedersen::pedersen(min_output.low.into(), min_output.high.into());
     intent_hash = core::pedersen::pedersen(intent_hash, min_output_hash);
+    intent_hash = core::pedersen::pedersen(intent_hash, max_fee_bps.into());
     intent_hash = core::pedersen::pedersen(intent_hash, deadline.into());
     intent_hash = core::pedersen::pedersen(intent_hash, privacy_mode.into());
     intent_hash = core::pedersen::pedersen(intent_hash, nonce);
@@ -262,6 +265,7 @@ fn test_end_to_end_intent_flow() {
         usdc,
         amount_commitment,
         min_output,
+        max_fee_bps,
         deadline,
         privacy_mode,
         signature

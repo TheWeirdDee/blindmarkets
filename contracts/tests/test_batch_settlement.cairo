@@ -59,6 +59,7 @@ trait IMockIntentRegistry<TContractState> {
         asset_out: ContractAddress,
         amount_commitment: felt252,
         min_output: u256,
+        max_fee_bps: u16,
         deadline: u64,
         privacy_mode: u8,
         status: IntentStatus
@@ -98,6 +99,7 @@ struct Intent {
     asset_out: ContractAddress,
     amount_commitment: felt252,
     min_output: u256,
+    max_fee_bps: u16,
     deadline: u64,
     privacy_mode: u8,
     status: IntentStatus,
@@ -293,6 +295,7 @@ fn test_settle_batch_success() {
         token,
         0xB1,
         1000,
+        50_u16,
         100,
         0,
         IntentStatus::PENDING(())
@@ -387,6 +390,7 @@ fn test_commitment_mismatch_slash() {
         token,
         0xB1,
         1000,
+        50_u16,
         100,
         0,
         IntentStatus::PENDING(())
