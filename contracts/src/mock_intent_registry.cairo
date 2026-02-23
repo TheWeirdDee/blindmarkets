@@ -14,6 +14,7 @@ trait IMockIntentRegistry<TContractState> {
         asset_out: ContractAddress,
         amount_commitment: felt252,
         min_output: u256,
+        max_fee_bps: u16,
         deadline: u64,
         privacy_mode: u8,
         status: IntentStatus
@@ -29,6 +30,7 @@ struct Intent {
     asset_out: ContractAddress,
     amount_commitment: felt252,
     min_output: u256,
+    max_fee_bps: u16,
     deadline: u64,
     privacy_mode: u8,
     status: IntentStatus,
@@ -92,6 +94,7 @@ mod MockIntentRegistry {
             asset_out: ContractAddress,
             amount_commitment: felt252,
             min_output: u256,
+            max_fee_bps: u16,
             deadline: u64,
             privacy_mode: u8,
             status: IntentStatus
@@ -103,6 +106,7 @@ mod MockIntentRegistry {
                 asset_out,
                 amount_commitment,
                 min_output,
+                max_fee_bps,
                 deadline,
                 privacy_mode,
                 status,

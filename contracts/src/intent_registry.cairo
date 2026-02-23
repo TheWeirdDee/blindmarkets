@@ -17,6 +17,7 @@ trait IIntentRegistry<TContractState> {
         asset_out: ContractAddress,
         amount_commitment: felt252,
         min_output: u256,
+        max_fee_bps: u16,
         deadline: u64,
         privacy_mode: u8,
         user_signature: Span<felt252>
@@ -45,6 +46,11 @@ trait IIntentRegistry<TContractState> {
     fn pause(ref self: TContractState) -> bool;
 
     fn unpause(ref self: TContractState) -> bool;
+
+    fn set_batch_settlement_contract(
+        ref self: TContractState,
+        batch_settlement_contract: ContractAddress
+    ) -> bool;
 }
 
 #[derive(Drop, Serde, starknet::Store)]
@@ -55,6 +61,7 @@ struct Intent {
     asset_out: ContractAddress,
     amount_commitment: felt252,
     min_output: u256,
+    max_fee_bps: u16,
     deadline: u64,
     privacy_mode: u8,
     status: IntentStatus,
@@ -104,6 +111,7 @@ mod IntentRegistry {
         IntentCanceled: IntentCanceled,
         IntentSettled: IntentSettled,
         IntentExpired: IntentExpired,
+        BatchSettlementContractUpdated: BatchSettlementContractUpdated,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -131,6 +139,12 @@ mod IntentRegistry {
     struct IntentExpired {
         intent_id: felt252,
         batch_id: felt252,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct BatchSettlementContractUpdated {
+        previous: ContractAddress,
+        updated: ContractAddress,
     }
 
     #[constructor]
@@ -162,6 +176,7 @@ mod IntentRegistry {
             asset_out: ContractAddress,
             amount_commitment: felt252,
             min_output: u256,
+            max_fee_bps: u16,
             deadline: u64,
             privacy_mode: u8,
             user_signature: Span<felt252>
@@ -185,6 +200,7 @@ mod IntentRegistry {
                 asset_out,
                 amount_commitment,
                 min_output,
+                max_fee_bps,
                 deadline,
                 privacy_mode,
                 nonce
@@ -206,6 +222,7 @@ mod IntentRegistry {
                 asset_out,
                 amount_commitment,
                 min_output,
+                max_fee_bps,
                 deadline,
                 privacy_mode,
                 status: IntentStatus::PENDING(()),
@@ -241,9 +258,6 @@ mod IntentRegistry {
 
             let current_time = get_block_timestamp();
             assert(current_time < intent.deadline, 'Intent expired');
-
-            let caller = get_caller_address();
-            assert(caller == intent_user, 'NOT_INTENT_OWNER');
 
             self._verify_signature(intent_user, intent_id, user_signature);
 
@@ -344,6 +358,29 @@ mod IntentRegistry {
             self.paused.write(false);
             true
         }
+
+        fn set_batch_settlement_contract(
+            ref self: ContractState,
+            batch_settlement_contract: ContractAddress
+        ) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin');
+
+            let current = self.batch_settlement_contract.read();
+            assert(current == zero_address(), 'BATCH_SETTLEMENT_ALREADY_SET');
+            assert(batch_settlement_contract != zero_address(), 'INVALID_BATCH_SETTLEMENT');
+
+            self.batch_settlement_contract.write(batch_settlement_contract);
+            self.emit(BatchSettlementContractUpdated {
+                previous: current,
+                updated: batch_settlement_contract,
+            });
+            true
+        }
+    }
+
+    fn zero_address() -> ContractAddress {
+        0.try_into().unwrap()
     }
 
     #[starknet::interface]
@@ -403,6 +440,7 @@ mod IntentRegistry {
             asset_out: ContractAddress,
             amount_commitment: felt252,
             min_output: u256,
+            max_fee_bps: u16,
             deadline: u64,
             privacy_mode: u8,
             nonce: felt252
@@ -412,6 +450,7 @@ mod IntentRegistry {
             hash = pedersen(hash, amount_commitment);
             let min_output_hash = pedersen(min_output.low.into(), min_output.high.into());
             hash = pedersen(hash, min_output_hash);
+            hash = pedersen(hash, max_fee_bps.into());
             hash = pedersen(hash, deadline.into());
             hash = pedersen(hash, privacy_mode.into());
             hash = pedersen(hash, nonce);

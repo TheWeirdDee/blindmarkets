@@ -8,6 +8,7 @@ struct Intent {
     asset_out: ContractAddress,
     amount_commitment: felt252,
     min_output: u256,
+    max_fee_bps: u16,
     deadline: u64,
     privacy_mode: u8,
     status: IntentStatus,
@@ -66,6 +67,26 @@ trait IBatchSettlement<TContractState> {
     ) -> bool;
 
     fn get_settlement(self: @TContractState, batch_id: felt252) -> Settlement;
+
+    fn set_intent_registry_contract(
+        ref self: TContractState,
+        intent_registry_contract: ContractAddress
+    ) -> bool;
+
+    fn set_batch_auction_contract(
+        ref self: TContractState,
+        batch_auction_contract: ContractAddress
+    ) -> bool;
+
+    fn set_solver_bond_contract(
+        ref self: TContractState,
+        solver_bond_contract: ContractAddress
+    ) -> bool;
+
+    fn set_proof_verifier_contract(
+        ref self: TContractState,
+        proof_verifier_contract: ContractAddress
+    ) -> bool;
 }
 
 #[starknet::interface]
@@ -187,6 +208,10 @@ mod BatchSettlement {
         BatchSettled: BatchSettled,
         BatchSettlementFailed: BatchSettlementFailed,
         TransferExecuted: TransferExecuted,
+        IntentRegistryContractUpdated: IntentRegistryContractUpdated,
+        BatchAuctionContractUpdated: BatchAuctionContractUpdated,
+        SolverBondContractUpdated: SolverBondContractUpdated,
+        ProofVerifierContractUpdated: ProofVerifierContractUpdated,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -209,6 +234,30 @@ mod BatchSettlement {
         to: ContractAddress,
         asset: ContractAddress,
         amount: u256,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct IntentRegistryContractUpdated {
+        previous: ContractAddress,
+        updated: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct BatchAuctionContractUpdated {
+        previous: ContractAddress,
+        updated: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct SolverBondContractUpdated {
+        previous: ContractAddress,
+        updated: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct ProofVerifierContractUpdated {
+        previous: ContractAddress,
+        updated: ContractAddress,
     }
 
     #[constructor]
@@ -402,6 +451,78 @@ mod BatchSettlement {
         fn get_settlement(self: @ContractState, batch_id: felt252) -> Settlement {
             self.settlements.read(batch_id)
         }
+
+        fn set_intent_registry_contract(
+            ref self: ContractState,
+            intent_registry_contract: ContractAddress
+        ) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin');
+            assert(intent_registry_contract != zero_address(), 'INVALID_INTENT_REGISTRY');
+
+            let previous = self.intent_registry_contract.read();
+            self.intent_registry_contract.write(intent_registry_contract);
+            self.emit(IntentRegistryContractUpdated {
+                previous,
+                updated: intent_registry_contract,
+            });
+            true
+        }
+
+        fn set_batch_auction_contract(
+            ref self: ContractState,
+            batch_auction_contract: ContractAddress
+        ) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin');
+            assert(batch_auction_contract != zero_address(), 'INVALID_BATCH_AUCTION');
+
+            let previous = self.batch_auction_contract.read();
+            self.batch_auction_contract.write(batch_auction_contract);
+            self.emit(BatchAuctionContractUpdated {
+                previous,
+                updated: batch_auction_contract,
+            });
+            true
+        }
+
+        fn set_solver_bond_contract(
+            ref self: ContractState,
+            solver_bond_contract: ContractAddress
+        ) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin');
+            assert(solver_bond_contract != zero_address(), 'INVALID_SOLVER_BOND');
+
+            let previous = self.solver_bond_contract.read();
+            self.solver_bond_contract.write(solver_bond_contract);
+            self.emit(SolverBondContractUpdated {
+                previous,
+                updated: solver_bond_contract,
+            });
+            true
+        }
+
+        fn set_proof_verifier_contract(
+            ref self: ContractState,
+            proof_verifier_contract: ContractAddress
+        ) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin');
+            assert(proof_verifier_contract != zero_address(), 'INVALID_PROOF_VERIFIER');
+
+            let previous = self.proof_verifier_contract.read();
+            self.proof_verifier_contract.write(proof_verifier_contract);
+            self.emit(ProofVerifierContractUpdated {
+                previous,
+                updated: proof_verifier_contract,
+            });
+            true
+        }
+    }
+
+    fn zero_address() -> ContractAddress {
+        0.try_into().unwrap()
     }
 
     #[generate_trait]
