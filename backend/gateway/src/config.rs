@@ -17,6 +17,8 @@ pub struct Config {
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+    pub websocket_channel_capacity: usize,
+    pub max_page_size: u32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -35,11 +37,13 @@ pub struct RedisConfig {
 pub struct RateLimitConfig {
     pub max_intents_per_user_per_minute: u32,
     pub max_requests_per_ip_per_minute: u32,
+    pub window_seconds: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct IntentConfig {
     pub batch_window_seconds: u64,
+    pub genesis_timestamp: u64,
     pub execution_delay_seconds: u64,
     pub intent_deadline_seconds: u64,
 }
@@ -47,6 +51,9 @@ pub struct IntentConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct StarknetConfig {
     pub rpc_url: String,
+    pub chain_id: String,
+    pub account_address: String,
+    pub account_private_key: String,
     pub intent_registry_address: String,
     pub batch_auction_address: String,
     pub batch_settlement_address: String,
@@ -57,6 +64,7 @@ pub struct SecurityConfig {
     pub cors_allowed_origins: String,
     pub api_key_header: String,
     pub api_key: String,
+    pub gateway_private_key: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -76,6 +84,14 @@ impl Config {
                 .map_err(|_| "PORT environment variable not set".to_string())?
                 .parse()
                 .map_err(|e| format!("Invalid PORT: {}", e))?,
+            websocket_channel_capacity: env::var("WEBSOCKET_CHANNEL_CAPACITY")
+                .map_err(|_| "WEBSOCKET_CHANNEL_CAPACITY environment variable not set".to_string())?
+                .parse()
+                .map_err(|e| format!("Invalid WEBSOCKET_CHANNEL_CAPACITY: {}", e))?,
+            max_page_size: env::var("MAX_PAGE_SIZE")
+                .map_err(|_| "MAX_PAGE_SIZE environment variable not set".to_string())?
+                .parse()
+                .map_err(|e| format!("Invalid MAX_PAGE_SIZE: {}", e))?,
         };
 
         let database = DatabaseConfig {
@@ -105,6 +121,10 @@ impl Config {
                 .map_err(|_| "MAX_REQUESTS_PER_IP_PER_MINUTE environment variable not set".to_string())?
                 .parse()
                 .map_err(|e| format!("Invalid MAX_REQUESTS_PER_IP_PER_MINUTE: {}", e))?,
+            window_seconds: env::var("RATE_LIMIT_WINDOW_SECONDS")
+                .map_err(|_| "RATE_LIMIT_WINDOW_SECONDS environment variable not set".to_string())?
+                .parse()
+                .map_err(|e| format!("Invalid RATE_LIMIT_WINDOW_SECONDS: {}", e))?,
         };
 
         let intents = IntentConfig {
@@ -112,6 +132,10 @@ impl Config {
                 .map_err(|_| "BATCH_WINDOW_SECONDS environment variable not set".to_string())?
                 .parse()
                 .map_err(|e| format!("Invalid BATCH_WINDOW_SECONDS: {}", e))?,
+            genesis_timestamp: env::var("GENESIS_TIMESTAMP")
+                .map_err(|_| "GENESIS_TIMESTAMP environment variable not set".to_string())?
+                .parse()
+                .map_err(|e| format!("Invalid GENESIS_TIMESTAMP: {}", e))?,
             execution_delay_seconds: env::var("EXECUTION_DELAY_SECONDS")
                 .map_err(|_| "EXECUTION_DELAY_SECONDS environment variable not set".to_string())?
                 .parse()
@@ -125,6 +149,12 @@ impl Config {
         let starknet = StarknetConfig {
             rpc_url: env::var("STARKNET_RPC_URL")
                 .map_err(|_| "STARKNET_RPC_URL environment variable not set".to_string())?,
+            chain_id: env::var("STARKNET_CHAIN_ID")
+                .map_err(|_| "STARKNET_CHAIN_ID environment variable not set".to_string())?,
+            account_address: env::var("GATEWAY_ACCOUNT_ADDRESS")
+                .map_err(|_| "GATEWAY_ACCOUNT_ADDRESS environment variable not set".to_string())?,
+            account_private_key: env::var("GATEWAY_ACCOUNT_PRIVATE_KEY")
+                .map_err(|_| "GATEWAY_ACCOUNT_PRIVATE_KEY environment variable not set".to_string())?,
             intent_registry_address: env::var("INTENT_REGISTRY_ADDRESS")
                 .map_err(|_| "INTENT_REGISTRY_ADDRESS not set".to_string())?,
             batch_auction_address: env::var("BATCH_AUCTION_ADDRESS")
@@ -140,6 +170,8 @@ impl Config {
                 .map_err(|_| "API_KEY_HEADER environment variable not set".to_string())?,
             api_key: env::var("API_KEY")
                 .map_err(|_| "API_KEY environment variable not set".to_string())?,
+            gateway_private_key: env::var("GATEWAY_PRIVATE_KEY")
+                .map_err(|_| "GATEWAY_PRIVATE_KEY environment variable not set".to_string())?,
         };
 
         let logging = LoggingConfig {
@@ -175,8 +207,70 @@ impl Config {
             return Err("INTENT_REGISTRY_ADDRESS must start with 0x".to_string());
         }
 
+        if self.starknet.chain_id.trim().is_empty() {
+            return Err("STARKNET_CHAIN_ID must not be empty".to_string());
+        }
+
+        if !self.starknet.account_address.starts_with("0x") {
+            return Err("GATEWAY_ACCOUNT_ADDRESS must start with 0x".to_string());
+        }
+        if self.starknet.account_address.len() < 4 {
+            return Err("GATEWAY_ACCOUNT_ADDRESS must not be empty".to_string());
+        }
+
+        if !self.starknet.account_private_key.starts_with("0x") {
+            return Err("GATEWAY_ACCOUNT_PRIVATE_KEY must start with 0x".to_string());
+        }
+        if self.starknet.account_private_key.len() != 66 {
+            return Err("GATEWAY_ACCOUNT_PRIVATE_KEY must be 32-byte hex with 0x prefix".to_string());
+        }
+
+        if self.intents.batch_window_seconds == 0 {
+            return Err("BATCH_WINDOW_SECONDS must be greater than 0".to_string());
+        }
+
+        if self.intents.genesis_timestamp == 0 {
+            return Err("GENESIS_TIMESTAMP must be greater than 0".to_string());
+        }
+
+        if self.intents.execution_delay_seconds == 0 {
+            return Err("EXECUTION_DELAY_SECONDS must be greater than 0".to_string());
+        }
+
+        if self.intents.intent_deadline_seconds == 0 {
+            return Err("INTENT_DEADLINE_SECONDS must be greater than 0".to_string());
+        }
+
+        if self.security.api_key.trim().is_empty() {
+            return Err("API_KEY must not be empty".to_string());
+        }
+
+        if self.security.api_key_header.trim().is_empty() {
+            return Err("API_KEY_HEADER must not be empty".to_string());
+        }
+
+        if self.security.gateway_private_key.trim().is_empty() {
+            return Err("GATEWAY_PRIVATE_KEY must not be empty".to_string());
+        }
+        if !self.security.gateway_private_key.starts_with("0x") ||
+           self.security.gateway_private_key.len() != 66 {
+            return Err("GATEWAY_PRIVATE_KEY must be 32-byte hex with 0x prefix".to_string());
+        }
+
         if self.server.port == 0 {
             return Err("PORT must be greater than 0".to_string());
+        }
+
+        if self.server.websocket_channel_capacity == 0 {
+            return Err("WEBSOCKET_CHANNEL_CAPACITY must be greater than 0".to_string());
+        }
+
+        if self.server.max_page_size == 0 {
+            return Err("MAX_PAGE_SIZE must be greater than 0".to_string());
+        }
+
+        if self.rate_limit.window_seconds == 0 {
+            return Err("RATE_LIMIT_WINDOW_SECONDS must be greater than 0".to_string());
         }
 
         Ok(())
