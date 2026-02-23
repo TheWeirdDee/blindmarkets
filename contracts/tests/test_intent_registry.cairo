@@ -19,6 +19,7 @@ trait IIntentRegistry<TContractState> {
         asset_out: ContractAddress,
         amount_commitment: felt252,
         min_output: u256,
+        max_fee_bps: u16,
         deadline: u64,
         privacy_mode: u8,
         user_signature: Span<felt252>
@@ -51,6 +52,7 @@ struct Intent {
     asset_out: ContractAddress,
     amount_commitment: felt252,
     min_output: u256,
+    max_fee_bps: u16,
     deadline: u64,
     privacy_mode: u8,
     status: felt252,
@@ -100,6 +102,7 @@ fn compute_intent_hash(
     asset_out: ContractAddress,
     amount_commitment: felt252,
     min_output: u256,
+    max_fee_bps: u16,
     deadline: u64,
     privacy_mode: u8,
     nonce: felt252
@@ -109,6 +112,7 @@ fn compute_intent_hash(
     hash = core::pedersen::pedersen(hash, amount_commitment);
     let min_output_hash = core::pedersen::pedersen(min_output.low.into(), min_output.high.into());
     hash = core::pedersen::pedersen(hash, min_output_hash);
+    hash = core::pedersen::pedersen(hash, max_fee_bps.into());
     hash = core::pedersen::pedersen(hash, deadline.into());
     hash = core::pedersen::pedersen(hash, privacy_mode.into());
     core::pedersen::pedersen(hash, nonce)
@@ -165,6 +169,7 @@ fn test_commit_intent_valid() {
         asset_out,
         amount_commitment,
         min_output,
+        50_u16,
         deadline,
         privacy_mode,
         nonce
@@ -185,6 +190,7 @@ fn test_commit_intent_valid() {
         asset_out,
         amount_commitment,
         min_output,
+        50_u16,
         deadline,
         privacy_mode,
         signature
@@ -230,7 +236,7 @@ fn test_commit_intent_duplicate_nonce() {
     start_mock_signature_ok(user);
 
     let intent_hash1 = compute_intent_hash(
-        user, asset_in, asset_out, amount_commitment, min_output, deadline, privacy_mode, nonce
+        user, asset_in, asset_out, amount_commitment, min_output, 50_u16, deadline, privacy_mode, nonce
     );
     let intent_id1 = compute_intent_id(user, nonce, intent_hash1);
     dispatcher.commit_intent(
@@ -242,13 +248,14 @@ fn test_commit_intent_duplicate_nonce() {
         asset_out,
         amount_commitment,
         min_output,
+        50_u16,
         deadline,
         privacy_mode,
         signature
     );
 
     let intent_hash2 = compute_intent_hash(
-        user, asset_in, asset_out, amount_commitment, min_output, deadline, privacy_mode, nonce
+        user, asset_in, asset_out, amount_commitment, min_output, 50_u16, deadline, privacy_mode, nonce
     );
     let intent_id2 = compute_intent_id(user, nonce, intent_hash2);
     dispatcher.commit_intent(
@@ -260,6 +267,7 @@ fn test_commit_intent_duplicate_nonce() {
         asset_out,
         amount_commitment,
         min_output,
+        50_u16,
         deadline,
         privacy_mode,
         signature
@@ -302,7 +310,7 @@ fn test_commit_intent_expired_deadline() {
     start_mock_signature_ok(user);
 
     let intent_hash = compute_intent_hash(
-        user, asset_in, asset_out, amount_commitment, min_output, deadline, privacy_mode, nonce
+        user, asset_in, asset_out, amount_commitment, min_output, 50_u16, deadline, privacy_mode, nonce
     );
     let intent_id = compute_intent_id(user, nonce, intent_hash);
     dispatcher.commit_intent(
@@ -314,6 +322,7 @@ fn test_commit_intent_expired_deadline() {
         asset_out,
         amount_commitment,
         min_output,
+        50_u16,
         deadline,
         privacy_mode,
         signature
@@ -354,7 +363,7 @@ fn test_commit_intent_when_paused() {
     let privacy_mode: u8 = 0;
     let nonce: felt252 = 0xB1;
     let intent_hash = compute_intent_hash(
-        user, asset_in, asset_out, amount_commitment, min_output, deadline, privacy_mode, nonce
+        user, asset_in, asset_out, amount_commitment, min_output, 50_u16, deadline, privacy_mode, nonce
     );
     let intent_id = compute_intent_id(user, nonce, intent_hash);
     let signature = array![1, 2].span();
@@ -372,6 +381,7 @@ fn test_commit_intent_when_paused() {
         asset_out,
         amount_commitment,
         min_output,
+        50_u16,
         deadline,
         privacy_mode,
         signature
