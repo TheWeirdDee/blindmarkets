@@ -63,6 +63,16 @@ trait IBatchAuction<TContractState> {
         reason: felt252,
         slash_amount: u256
     ) -> bool;
+
+    fn set_solver_bond_contract(
+        ref self: TContractState,
+        solver_bond_contract: ContractAddress
+    ) -> bool;
+
+    fn set_batch_settlement_contract(
+        ref self: TContractState,
+        batch_settlement_contract: ContractAddress
+    ) -> bool;
 }
 
 #[derive(Drop, Serde, starknet::Store, PartialEq)]
@@ -132,6 +142,8 @@ mod BatchAuction {
         AuctionFinalized: AuctionFinalized,
         SolverSelected: SolverSelected,
         BatchFailed: BatchFailed,
+        SolverBondContractUpdated: SolverBondContractUpdated,
+        BatchSettlementContractUpdated: BatchSettlementContractUpdated,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -159,6 +171,18 @@ mod BatchAuction {
     struct BatchFailed {
         batch_id: felt252,
         reason: felt252,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct SolverBondContractUpdated {
+        previous: ContractAddress,
+        updated: ContractAddress,
+    }
+
+    #[derive(Drop, starknet::Event)]
+    struct BatchSettlementContractUpdated {
+        previous: ContractAddress,
+        updated: ContractAddress,
     }
 
     #[constructor]
@@ -383,6 +407,44 @@ mod BatchAuction {
             .span();
             let slashed = bond_dispatcher.slash(solver, slash_amount, reason, recipients);
             assert(slashed, 'SLASH_FAILED');
+            true
+        }
+
+        fn set_solver_bond_contract(
+            ref self: ContractState,
+            solver_bond_contract: ContractAddress
+        ) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin');
+
+            let current = self.solver_bond_contract.read();
+            assert(current == zero_address(), 'SOLVER_BOND_ALREADY_SET');
+            assert(solver_bond_contract != zero_address(), 'INVALID_SOLVER_BOND');
+
+            self.solver_bond_contract.write(solver_bond_contract);
+            self.emit(SolverBondContractUpdated {
+                previous: current,
+                updated: solver_bond_contract,
+            });
+            true
+        }
+
+        fn set_batch_settlement_contract(
+            ref self: ContractState,
+            batch_settlement_contract: ContractAddress
+        ) -> bool {
+            let caller = get_caller_address();
+            assert(caller == self.admin.read(), 'Only admin');
+
+            let current = self.batch_settlement_contract.read();
+            assert(current == zero_address(), 'BATCH_SETTLEMENT_ALREADY_SET');
+            assert(batch_settlement_contract != zero_address(), 'INVALID_BATCH_SETTLEMENT');
+
+            self.batch_settlement_contract.write(batch_settlement_contract);
+            self.emit(BatchSettlementContractUpdated {
+                previous: current,
+                updated: batch_settlement_contract,
+            });
             true
         }
     }
