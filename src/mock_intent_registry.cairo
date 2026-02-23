@@ -1,0 +1,1 @@
+../contracts/src/mock_intent_registry.cairo
