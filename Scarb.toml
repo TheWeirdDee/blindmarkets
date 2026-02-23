@@ -1,0 +1,20 @@
+[package]
+name = "blindmarkets_contracts"
+version = "1.0.0"
+edition = "2023_11"
+
+[lib]
+path = "contracts/src/lib.cairo"
+
+[dependencies]
+starknet = ">=2.5.0"
+
+[dev-dependencies]
+cairo_test = "2.16.0"
+
+[scripts]
+test = "scarb cairo-test"
+
+[[target.starknet-contract]]
+sierra = true
+casm = true
