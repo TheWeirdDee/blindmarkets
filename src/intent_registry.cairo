@@ -1,0 +1,1 @@
+../contracts/src/intent_registry.cairo
