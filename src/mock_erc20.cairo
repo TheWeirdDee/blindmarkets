@@ -1,0 +1,1 @@
+../contracts/src/mock_erc20.cairo
