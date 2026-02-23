@@ -1,0 +1,1 @@
+../contracts/src/batch_auction.cairo

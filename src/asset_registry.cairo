@@ -1,0 +1,1 @@
+../contracts/src/asset_registry.cairo
