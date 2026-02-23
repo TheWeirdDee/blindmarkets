@@ -53,3 +53,27 @@ temp/
 *.pem
 *.key
 secrets/
+
+# Vercel
+.vercel/
+**/.vercel/
+
+# Env safety (repo-wide)
+**/.env
+**/.env.local
+**/.env.development
+**/.env.production
+**/.env.test
+**/.env.*.local
+!**/.env.example
+
+# Local databases / caches
+*.sqlite
+*.sqlite3
+.cache/
+**/.cache/
+
+# Misc credentials
+*.p12
+*.pfx
+.envrc
