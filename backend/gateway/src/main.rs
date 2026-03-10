@@ -81,6 +81,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/v1/intents/pending", get(api::get_pending_intents))
         .route("/v1/intents/:intent_id", get(api::get_intent_status))
         .route("/v1/intents/:intent_id/cancel", post(api::cancel_intent))
+        .route("/v1/intents/:intent_id/onchain", post(api::reconcile_onchain_intent))
         .route("/v1/batches/:batch_id/intents", get(api::list_batch_intents))
         .route("/v1/gateway/public_key", get(api::get_gateway_public_key))
         .route("/v1/batches/close", post(api::close_batch))

@@ -30,6 +30,8 @@ pub struct SubmitIntentRequest {
     pub user_signature: Vec<String>,
     pub client_public_key: String,
     pub nonce: String,
+    pub authorization_hash: Option<String>,
+    pub submission_mode: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -37,6 +39,7 @@ pub struct SubmitIntentResponse {
     pub intent_id: String,
     pub batch_id: String,
     pub estimated_execution_time: u64,
+    pub awaiting_user_transaction: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -108,6 +111,28 @@ pub struct BatchListResponse {
     pub offset: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SubmissionMode {
+    Gateway,
+    SelfCommit,
+}
+
+impl SubmissionMode {
+    fn as_db_value(self) -> &'static str {
+        match self {
+            SubmissionMode::Gateway => "GATEWAY",
+            SubmissionMode::SelfCommit => "SELF_COMMIT",
+        }
+    }
+}
+
+fn initial_intent_status(mode: SubmissionMode) -> &'static str {
+    match mode {
+        SubmissionMode::Gateway => "PENDING",
+        SubmissionMode::SelfCommit => "AWAITING_ONCHAIN",
+    }
+}
+
 pub async fn submit_intent(
     axum::extract::State(pool): axum::extract::State<sqlx::PgPool>,
     Extension(config): Extension<Arc<Config>>,
@@ -130,6 +155,7 @@ pub async fn submit_intent(
     if let Err(code) = validate_submit_request(&payload) {
         return reject(code);
     }
+    let submission_mode = parse_submission_mode(payload.submission_mode.as_deref())?;
 
     let client_ip = client_addr.ip().to_string();
     rate_limiter.check_ip_limit(&client_ip).await.map_err(|e| {
@@ -144,7 +170,13 @@ pub async fn submit_intent(
 
     tracing::info!("Received intent submission: {}", payload.intent_id);
 
-    let message_hash = &payload.commitment;
+    let message_hash = match submission_mode {
+        SubmissionMode::Gateway => payload.commitment.as_str(),
+        SubmissionMode::SelfCommit => payload.authorization_hash.as_deref().ok_or_else(|| {
+            tracing::warn!("authorization_hash is required for self_commit mode");
+            StatusCode::BAD_REQUEST
+        })?,
+    };
     let user_address_from_sig = extract_user_address_from_intent(&payload)?;
 
     let is_valid = crate::auth::verify_signature(
@@ -356,9 +388,11 @@ pub async fn submit_intent(
             commitment,
             client_public_key,
             batch_id,
-            deadline
+            deadline,
+            submission_mode,
+            status
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         ON CONFLICT (intent_id) DO NOTHING
         "#,
         payload.intent_id,
@@ -379,7 +413,9 @@ pub async fn submit_intent(
         payload.commitment,
         payload.client_public_key,
         batch_id,
-        decrypted_intent.deadline as i64
+        decrypted_intent.deadline as i64,
+        submission_mode.as_db_value(),
+        initial_intent_status(submission_mode),
     )
     .execute(&mut *tx)
     .await
@@ -399,85 +435,108 @@ pub async fn submit_intent(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let commitment = IntentCommitment {
-        intent_id: payload.intent_id.clone(),
-        user_address: payload.user_address.clone(),
-        intent_hash: payload.commitment.clone(),
-        nonce: payload.nonce.clone(),
-        asset_in: decrypted_intent.asset_in.clone(),
-        asset_out: decrypted_intent.asset_out.clone(),
-        amount_commitment: decrypted_intent.amount_commitment.clone(),
-        min_output: decrypted_intent.min_output.to_string(),
-        max_fee_bps: decrypted_intent.max_fee_bps,
-        deadline: decrypted_intent.deadline,
-        privacy_mode: decrypted_intent.privacy_mode,
-    };
+    if submission_mode == SubmissionMode::Gateway {
+        let commitment = IntentCommitment {
+            intent_id: payload.intent_id.clone(),
+            user_address: payload.user_address.clone(),
+            intent_hash: payload.commitment.clone(),
+            nonce: payload.nonce.clone(),
+            asset_in: decrypted_intent.asset_in.clone(),
+            asset_out: decrypted_intent.asset_out.clone(),
+            amount_commitment: decrypted_intent.amount_commitment.clone(),
+            min_output: decrypted_intent.min_output.to_string(),
+            max_fee_bps: decrypted_intent.max_fee_bps,
+            deadline: decrypted_intent.deadline,
+            privacy_mode: decrypted_intent.privacy_mode,
+        };
 
-    match starknet_client
-        .commit_intent(commitment, payload.user_signature.clone())
-        .await
-    {
-        Ok(tx_hash) => {
-            tracing::info!(
-                "Intent {} committed on-chain: {}",
-                payload.intent_id,
-                tx_hash
-            );
-        }
-        Err(e) => {
-            tracing::error!("On-chain commit failed for {}: {}", payload.intent_id, e);
-            if let Ok(mut rollback_tx) = pool.begin().await {
-                let _ = sqlx::query!(
+        match starknet_client
+            .commit_intent(commitment, payload.user_signature.clone())
+            .await
+        {
+            Ok(tx_hash) => {
+                let committed_at = chrono::Utc::now().naive_utc();
+                sqlx::query!(
                     r#"
                     UPDATE intents
-                    SET status = 'ONCHAIN_FAILED'
+                    SET onchain_tx_hash = $2,
+                        onchain_committed_at = COALESCE(onchain_committed_at, $3)
                     WHERE intent_id = $1
                     "#,
-                    payload.intent_id
+                    payload.intent_id,
+                    tx_hash,
+                    committed_at,
                 )
-                .execute(&mut *rollback_tx)
-                .await;
+                .execute(&pool)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Database error: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
 
-                let _ = sqlx::query!(
-                    r#"
-                    DELETE FROM user_nonces
-                    WHERE user_address = $1 AND nonce = $2
-                    "#,
-                    payload.user_address,
-                    payload.nonce
-                )
-                .execute(&mut *rollback_tx)
-                .await;
-
-                let _ = sqlx::query!(
-                    r#"
-                    UPDATE pending_balances
-                    SET pending_amount = GREATEST(pending_amount - $3, 0)
-                    WHERE user_address = $1 AND asset_address = $2
-                    "#,
-                    payload.user_address,
-                    decrypted_intent.asset_in,
-                    pending_amount
-                )
-                .execute(&mut *rollback_tx)
-                .await;
-
-                let _ = rollback_tx.commit().await;
+                tracing::info!(
+                    "Intent {} committed on-chain: {}",
+                    payload.intent_id,
+                    tx_hash
+                );
             }
-            metrics.intents_onchain_failed_total.inc();
-            metrics.request_latency_seconds.observe(start.elapsed().as_secs_f64());
-            return Err(StatusCode::BAD_GATEWAY);
+            Err(e) => {
+                tracing::error!("On-chain commit failed for {}: {}", payload.intent_id, e);
+                if let Ok(mut rollback_tx) = pool.begin().await {
+                    let _ = sqlx::query!(
+                        r#"
+                        UPDATE intents
+                        SET status = 'ONCHAIN_FAILED'
+                        WHERE intent_id = $1
+                        "#,
+                        payload.intent_id
+                    )
+                    .execute(&mut *rollback_tx)
+                    .await;
+
+                    let _ = sqlx::query!(
+                        r#"
+                        DELETE FROM user_nonces
+                        WHERE user_address = $1 AND nonce = $2
+                        "#,
+                        payload.user_address,
+                        payload.nonce
+                    )
+                    .execute(&mut *rollback_tx)
+                    .await;
+
+                    let _ = sqlx::query!(
+                        r#"
+                        UPDATE pending_balances
+                        SET pending_amount = GREATEST(pending_amount - $3, 0)
+                        WHERE user_address = $1 AND asset_address = $2
+                        "#,
+                        payload.user_address,
+                        decrypted_intent.asset_in,
+                        pending_amount
+                    )
+                    .execute(&mut *rollback_tx)
+                    .await;
+
+                    let _ = rollback_tx.commit().await;
+                }
+                metrics.intents_onchain_failed_total.inc();
+                metrics.request_latency_seconds.observe(start.elapsed().as_secs_f64());
+                return Err(StatusCode::BAD_GATEWAY);
+            }
         }
+
+        tracing::info!("Intent {} saved to database", payload.intent_id);
+
+        crate::websocket::broadcast_new_intent(
+            &broadcaster,
+            payload.intent_id.clone(),
+            batch_id.clone(),
+            decrypted,
+        ).await;
+    } else {
+        tracing::info!("Intent {} stored awaiting user on-chain commit", payload.intent_id);
     }
-
-    tracing::info!("Intent {} saved to database", payload.intent_id);
-
-    crate::websocket::broadcast_new_intent(
-        &broadcaster,
-        payload.intent_id.clone(),
-        batch_id.clone(),
-        decrypted,
-    ).await;
 
     metrics.intents_submitted_total.inc();
     metrics.request_latency_seconds.observe(start.elapsed().as_secs_f64());
@@ -486,6 +545,7 @@ pub async fn submit_intent(
         intent_id: payload.intent_id,
         batch_id,
         estimated_execution_time,
+        awaiting_user_transaction: submission_mode == SubmissionMode::SelfCommit,
     }))
 }
 
@@ -573,7 +633,7 @@ pub async fn list_intents(
         let normalized = status.to_uppercase();
         if !matches!(
             normalized.as_str(),
-            "PENDING" | "AUCTION" | "SETTLED" | "CANCELED" | "ONCHAIN_FAILED"
+            "PENDING" | "AUCTION" | "SETTLED" | "CANCELED" | "ONCHAIN_FAILED" | "AWAITING_ONCHAIN"
         ) {
             tracing::warn!("Invalid status filter");
             return Err(StatusCode::BAD_REQUEST);
@@ -776,6 +836,13 @@ pub struct CancelIntentRequest {
     pub signature: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct OnchainLifecycleRequest {
+    pub action: String,
+    pub user_address: String,
+    pub tx_hash: String,
+}
+
 pub async fn cancel_intent(
     Path(intent_id): Path<String>,
     axum::extract::State(pool): axum::extract::State<sqlx::PgPool>,
@@ -840,10 +907,10 @@ pub async fn cancel_intent(
     }
 
     // Check intent is still cancellable
-        if intent.status != "PENDING" {
-            tracing::warn!("Intent {} cannot be cancelled (status: {})", intent_id, intent.status);
-            return Err(StatusCode::BAD_REQUEST);
-        }
+    if !matches!(intent.status.as_str(), "PENDING" | "AUCTION") {
+        tracing::warn!("Intent {} cannot be cancelled (status: {})", intent_id, intent.status);
+        return Err(StatusCode::BAD_REQUEST);
+    }
 
     let encrypted_session_key = intent.encrypted_session_key.ok_or_else(|| {
         tracing::error!("Missing encrypted_session_key for intent {}", intent_id);
@@ -885,23 +952,25 @@ pub async fn cancel_intent(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    match starknet_client
+    let tx_hash = match starknet_client
         .cancel_intent(&intent_id, payload.signature.clone())
         .await
     {
         Ok(tx_hash) => {
             tracing::info!("Intent {} canceled on-chain: {}", intent_id, tx_hash);
+            tx_hash
         }
         Err(e) => {
             tracing::error!("On-chain cancel failed for {}: {}", intent_id, e);
             return Err(StatusCode::BAD_GATEWAY);
         }
-    }
+    };
 
     let pending_amount = BigDecimal::from_str(&decrypted_intent.amount.to_string()).map_err(|e| {
         tracing::error!("Invalid amount format: {}", e);
         StatusCode::BAD_REQUEST
     })?;
+    let canceled_at = chrono::Utc::now().naive_utc();
 
     let mut tx = pool.begin().await.map_err(|e| {
         tracing::error!("Database error: {}", e);
@@ -912,10 +981,14 @@ pub async fn cancel_intent(
     sqlx::query!(
         r#"
         UPDATE intents
-        SET status = 'CANCELED'
+        SET status = 'CANCELED',
+            onchain_tx_hash = $2,
+            canceled_at = $3
         WHERE intent_id = $1
         "#,
-        intent_id
+        intent_id,
+        tx_hash,
+        canceled_at,
     )
     .execute(&mut *tx)
     .await
@@ -947,6 +1020,229 @@ pub async fn cancel_intent(
     })?;
 
     tracing::info!("Intent {} cancelled successfully", intent_id);
+    Ok(StatusCode::OK)
+}
+
+pub async fn reconcile_onchain_intent(
+    Path(intent_id): Path<String>,
+    axum::extract::State(pool): axum::extract::State<sqlx::PgPool>,
+    Extension(config): Extension<Arc<Config>>,
+    Extension(rate_limiter): Extension<Arc<RateLimiter>>,
+    Extension(broadcaster): Extension<Arc<crate::websocket::SolverBroadcaster>>,
+    ConnectInfo(client_addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Json(payload): Json<OnchainLifecycleRequest>,
+) -> Result<StatusCode, StatusCode> {
+    require_api_key(&headers, &config)?;
+
+    let client_ip = client_addr.ip().to_string();
+    rate_limiter.check_ip_limit(&client_ip).await.map_err(|e| {
+        tracing::warn!("IP rate limit exceeded: {}", e);
+        StatusCode::TOO_MANY_REQUESTS
+    })?;
+
+    validate_onchain_lifecycle_request(&payload)?;
+
+    let action = payload.action.trim().to_ascii_uppercase();
+    let intent = sqlx::query!(
+        r#"
+        SELECT
+            user_address,
+            status,
+            batch_id,
+            ciphertext,
+            encrypted_session_key,
+            client_public_key,
+            asset_in,
+            amount,
+            submission_mode,
+            onchain_tx_hash
+        FROM intents
+        WHERE intent_id = $1
+        "#,
+        intent_id
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let intent = match intent {
+        Some(intent) => intent,
+        None => return Err(StatusCode::NOT_FOUND),
+    };
+
+    if intent.user_address != payload.user_address {
+        tracing::warn!("User {} does not own intent {}", payload.user_address, intent_id);
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let now = chrono::Utc::now().naive_utc();
+    match action.as_str() {
+        "COMMITTED" => {
+            if intent
+                .onchain_tx_hash
+                .as_deref()
+                .is_some_and(|existing| existing.eq_ignore_ascii_case(payload.tx_hash.as_str()))
+            {
+                tracing::info!(
+                    "Intent {} commit already reconciled with tx {}",
+                    intent_id,
+                    payload.tx_hash
+                );
+                return Ok(StatusCode::OK);
+            }
+
+            if intent.status == "AWAITING_ONCHAIN" || intent.status == "ONCHAIN_FAILED" {
+                sqlx::query!(
+                    r#"
+                    UPDATE intents
+                    SET status = 'PENDING',
+                        onchain_tx_hash = $2,
+                        onchain_committed_at = $3
+                    WHERE intent_id = $1
+                    "#,
+                    intent_id,
+                    payload.tx_hash,
+                    now,
+                )
+                .execute(&pool)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Database error: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+
+                let encrypted_session_key = intent.encrypted_session_key.ok_or_else(|| {
+                    tracing::error!("Missing encrypted_session_key for intent {}", intent_id);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+                let plaintext = crypto::decrypt_from_client(
+                    &intent.ciphertext,
+                    &encrypted_session_key,
+                    &intent.client_public_key,
+                    &config.security.gateway_private_key,
+                )
+                .map_err(|e| {
+                    tracing::error!("Failed to decrypt committed intent {}: {}", intent_id, e);
+                    StatusCode::BAD_REQUEST
+                })?;
+
+                crate::websocket::broadcast_new_intent(
+                    &broadcaster,
+                    intent_id.clone(),
+                    intent.batch_id,
+                    plaintext,
+                )
+                .await;
+            } else if intent.submission_mode == "GATEWAY"
+                && matches!(intent.status.as_str(), "PENDING" | "AUCTION" | "SETTLED")
+                && intent.onchain_tx_hash.is_none()
+            {
+                sqlx::query!(
+                    r#"
+                    UPDATE intents
+                    SET onchain_tx_hash = $2,
+                        onchain_committed_at = COALESCE(onchain_committed_at, $3)
+                    WHERE intent_id = $1
+                    "#,
+                    intent_id,
+                    payload.tx_hash,
+                    now,
+                )
+                .execute(&pool)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Database error: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            } else {
+                tracing::warn!("Intent {} is not awaiting on-chain commit", intent_id);
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+        "CANCELED" => {
+            if intent.status == "CANCELED"
+                && intent
+                    .onchain_tx_hash
+                    .as_deref()
+                    .is_some_and(|existing| existing.eq_ignore_ascii_case(payload.tx_hash.as_str()))
+            {
+                tracing::info!(
+                    "Intent {} cancel already reconciled with tx {}",
+                    intent_id,
+                    payload.tx_hash
+                );
+                return Ok(StatusCode::OK);
+            }
+
+            if !matches!(
+                intent.status.as_str(),
+                "AWAITING_ONCHAIN" | "PENDING" | "ONCHAIN_FAILED" | "AUCTION"
+            ) {
+                tracing::warn!("Intent {} cannot be marked canceled from {}", intent_id, intent.status);
+                return Err(StatusCode::BAD_REQUEST);
+            }
+
+            let pending_amount = intent.amount.ok_or_else(|| {
+                tracing::error!("Missing amount for intent {}", intent_id);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+            let mut tx = pool.begin().await.map_err(|e| {
+                tracing::error!("Database error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+            sqlx::query!(
+                r#"
+                UPDATE intents
+                SET status = 'CANCELED',
+                    onchain_tx_hash = $2,
+                    canceled_at = $3
+                WHERE intent_id = $1
+                "#,
+                intent_id,
+                payload.tx_hash,
+                now,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                tracing::error!("Database error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+            sqlx::query!(
+                r#"
+                UPDATE pending_balances
+                SET pending_amount = GREATEST(pending_amount - $3, 0)
+                WHERE user_address = $1 AND asset_address = $2
+                "#,
+                payload.user_address,
+                intent.asset_in,
+                pending_amount,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| {
+                tracing::error!("Database error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+            tx.commit().await.map_err(|e| {
+                tracing::error!("Database error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        }
+        _ => {
+            tracing::warn!("Unsupported on-chain lifecycle action: {}", payload.action);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
     Ok(StatusCode::OK)
 }
 
@@ -1222,7 +1518,7 @@ pub async fn settle_batch(
         r#"
         SELECT intent_id, ciphertext, encrypted_session_key, client_public_key, user_address
         FROM intents
-        WHERE batch_id = $1 AND status != 'CANCELED'
+        WHERE batch_id = $1 AND status IN ('PENDING', 'AUCTION')
         "#,
         payload.batch_id
     )
@@ -1280,7 +1576,7 @@ pub async fn settle_batch(
         r#"
         UPDATE intents
         SET status = 'SETTLED'
-        WHERE batch_id = $1 AND status != 'CANCELED'
+        WHERE batch_id = $1 AND status IN ('PENDING', 'AUCTION')
         "#,
         payload.batch_id
     )
@@ -1449,6 +1745,14 @@ fn validate_submit_request(payload: &SubmitIntentRequest) -> Result<(), StatusCo
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    if let Some(ref mode) = payload.submission_mode {
+        let normalized = mode.trim().to_ascii_uppercase();
+        if normalized != "GATEWAY" && normalized != "SELF_COMMIT" {
+            tracing::warn!("submission_mode must be GATEWAY or SELF_COMMIT");
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
     // Lightweight hex check for fields that must be field elements
     for (label, value) in [
         ("intent_id", payload.intent_id.as_str()),
@@ -1461,6 +1765,13 @@ fn validate_submit_request(payload: &SubmitIntentRequest) -> Result<(), StatusCo
     ] {
         if !is_hex_felt(value) {
             tracing::warn!("Invalid hex for {}", label);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
+    if let Some(ref authorization_hash) = payload.authorization_hash {
+        if !is_hex_felt(authorization_hash) {
+            tracing::warn!("authorization_hash must be valid felt hex");
             return Err(StatusCode::BAD_REQUEST);
         }
     }
@@ -1522,6 +1833,35 @@ fn validate_failed_batch_request(payload: &FailedBatchRequest) -> Result<(), Sta
     }
 
     Ok(())
+}
+
+fn validate_onchain_lifecycle_request(payload: &OnchainLifecycleRequest) -> Result<(), StatusCode> {
+    let action = payload.action.trim().to_ascii_uppercase();
+    if action != "COMMITTED" && action != "CANCELED" {
+        tracing::warn!("action must be COMMITTED or CANCELED");
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if !is_hex_felt(&payload.user_address) {
+        tracing::warn!("user_address must be valid felt hex");
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if !is_hex_felt(&payload.tx_hash) {
+        tracing::warn!("tx_hash must be valid felt hex");
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    Ok(())
+}
+
+fn parse_submission_mode(value: Option<&str>) -> Result<SubmissionMode, StatusCode> {
+    match value.map(|mode| mode.trim().to_ascii_uppercase()) {
+        None => Ok(SubmissionMode::Gateway),
+        Some(mode) if mode == "GATEWAY" => Ok(SubmissionMode::Gateway),
+        Some(mode) if mode == "SELF_COMMIT" => Ok(SubmissionMode::SelfCommit),
+        Some(_) => Err(StatusCode::BAD_REQUEST),
+    }
 }
 
 fn deserialize_u128<'de, D>(deserializer: D) -> Result<u128, D::Error>
