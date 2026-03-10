@@ -19,6 +19,7 @@
     "react-hook-form": "7.52.2",
     "recharts": "2.12.7",
     "starknet": "6.13.0",
+    "lucide-react": "0.468.0",
     "zustand": "4.5.2"
   },
   "devDependencies": {

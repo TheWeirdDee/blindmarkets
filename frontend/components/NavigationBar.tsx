@@ -25,6 +25,7 @@ export default function NavigationBar({ variant = 'app' }: NavigationBarProps) {
               <Link href="#risk-disclosure" className="transition-colors hover:text-text-primary">Risk</Link>
               <Link href="/dashboard#intent-history" className="transition-colors hover:text-text-primary">History</Link>
               <Link href="/analytics" className="transition-colors hover:text-text-primary">Analytics</Link>
+              <Link href="/docs" className="transition-colors hover:text-text-primary">Docs</Link>
             </>
           ) : (
             <>
@@ -32,6 +33,7 @@ export default function NavigationBar({ variant = 'app' }: NavigationBarProps) {
               <Link href="/intent" className="transition-colors hover:text-text-primary">Intent</Link>
               <Link href="/analytics" className="transition-colors hover:text-text-primary">Analytics</Link>
               <Link href="/dashboard#intent-history" className="transition-colors hover:text-text-primary">History</Link>
+              <Link href="/docs" className="transition-colors hover:text-text-primary">Docs</Link>
             </>
           )}
         </div>
