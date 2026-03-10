@@ -1,6 +1,6 @@
-const Code = ({ children }: { children: string }) => (
-  <pre><code>{children.trim()}</code></pre>
-);
+import { DocCode } from '@/components/DocCode';
+import { DocCallout } from '@/components/DocCallout';
+import { DocStep, DocSteps } from '@/components/DocStep';
 
 export default function SelfHostingPage() {
   return (
@@ -46,14 +46,12 @@ export default function SelfHostingPage() {
       <hr />
 
       <h2>1. Clone and configure</h2>
-      <Code>{`
+      <DocCode language="bash">{`
 git clone https://github.com/winszns/blindmarkets
 cd blindmarkets
 cp .env.compose.example .env
-      `}</Code>
-      <p>
-        Open <code>.env</code> and fill in:
-      </p>
+      `}</DocCode>
+      <p>Open <code>.env</code> and fill in:</p>
       <ul>
         <li><strong>GATEWAY_API_KEY</strong> — any random string, e.g. <code>openssl rand -hex 32</code></li>
         <li><strong>GATEWAY_ACCOUNT_ADDRESS</strong> and <strong>GATEWAY_ACCOUNT_PRIVATE_KEY</strong> — your Starknet account</li>
@@ -64,6 +62,11 @@ cp .env.compose.example .env
         Sepolia deployment values.
       </p>
 
+      <DocCallout type="warning" title="Keep your private key out of git">
+        The <code>.env</code> file is in <code>.gitignore</code> by default. Never commit it.
+        Use <code>openssl rand -hex 32</code> to generate a strong API key.
+      </DocCallout>
+
       <hr />
 
       <h2>2. Register your gateway</h2>
@@ -71,13 +74,13 @@ cp .env.compose.example .env
         The gateway account must be registered in the GatewayRegistry contract before it can relay
         intents. Run this once:
       </p>
-      <Code>{`
+      <DocCode language="bash">{`
 sncast --account your_account invoke \\
   --network sepolia \\
   --contract-address 0x0572569d692b6711f7da40d9d196bccf56b703cf8dafe03580aa713e974557b0 \\
   --function register_gateway \\
   --calldata YOUR_GATEWAY_ADDRESS YOUR_GATEWAY_PUBLIC_KEY
-      `}</Code>
+      `}</DocCode>
       <p>
         To get your public key: <code>sncast account list</code> — look for the{' '}
         <code>public key</code> field next to your account.
@@ -86,9 +89,7 @@ sncast --account your_account invoke \\
       <hr />
 
       <h2>3. Start the stack</h2>
-      <Code>{`
-docker compose up --build
-      `}</Code>
+      <DocCode language="bash">{`docker compose up --build`}</DocCode>
       <p>
         First build takes a few minutes — Rust compiles from source. After that, rebuilds are
         much faster because Docker caches the dependency layer.
@@ -112,11 +113,11 @@ docker compose up --build
       <p>
         In your Vercel project settings (or your local <code>frontend/.env.local</code>), set:
       </p>
-      <Code>{`
+      <DocCode filename=".env.local">{`
 GATEWAY_URL=http://localhost:3000       # or your public URL
 GATEWAY_API_KEY=your-api-key
 GATEWAY_API_KEY_HEADER=X-API-KEY
-      `}</Code>
+      `}</DocCode>
 
       <hr />
 
@@ -146,6 +147,11 @@ GATEWAY_API_KEY_HEADER=X-API-KEY
         <code>{'${{Redis.REDIS_URL}}'}</code>.
       </p>
 
+      <DocCallout type="tip" title="Internal networking saves egress costs">
+        Using <code>gateway.railway.internal:3000</code> instead of the public URL routes traffic
+        internally within Railway. This avoids egress charges and is faster.
+      </DocCallout>
+
       <hr />
 
       <h2>Running a solver</h2>
@@ -154,22 +160,27 @@ GATEWAY_API_KEY_HEADER=X-API-KEY
         loop: polling the gateway for open batches, computing a solution, and submitting it
         on-chain. To run it:
       </p>
-      <Code>{`
+      <DocCode language="bash">{`
 # Add to docker-compose.yml services or run directly:
 SOLVER_ACCOUNT_ADDRESS=0x... \\
 SOLVER_ACCOUNT_PRIVATE_KEY=0x... \\
 GATEWAY_URL=http://localhost:3000 \\
 GATEWAY_API_KEY=your-key \\
 cargo run --release -p blindmarkets-solver
-      `}</Code>
-      <p>
+      `}</DocCode>
+
+      <DocCallout type="note" title="Bond required before a solver can submit">
         A solver must have a bond deposited in the SolverBond contract before it can submit
         solutions. The minimum bond is 1 STRK. See the{' '}
-        <a href="https://sepolia.starkscan.co/contract/0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8" target="_blank" rel="noreferrer">
-          SolverBond contract
+        <a
+          href="https://sepolia.starkscan.co/contract/0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8"
+          target="_blank"
+          rel="noreferrer"
+        >
+          SolverBond contract on Starkscan
         </a>{' '}
-        on Starkscan to deposit.
-      </p>
+        to deposit.
+      </DocCallout>
     </article>
   );
 }

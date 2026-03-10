@@ -1,3 +1,6 @@
+import { DocCallout } from '@/components/DocCallout';
+import { DocCode } from '@/components/DocCode';
+
 const Method = ({ verb, path, desc }: { verb: string; path: string; desc: string }) => {
   const colors: Record<string, string> = {
     GET: 'text-accent-success bg-accent-success/10',
@@ -41,16 +44,21 @@ export default function ApiPage() {
 
       <h2>Authentication</h2>
       <p>Every request must include your API key:</p>
-      <pre><code>{`X-API-KEY: your-api-key`}</code></pre>
+      <DocCode language="http">{`X-API-KEY: your-api-key`}</DocCode>
       <p>
         Requests without a valid key return <code>401 Unauthorized</code>. Rate limiting returns{' '}
         <code>429 Too Many Requests</code> — the SDK handles retries automatically.
       </p>
 
+      <DocCallout type="note">
+        The <code>/health</code> endpoint does not require authentication. Use it for uptime
+        monitoring without exposing your API key.
+      </DocCallout>
+
       <hr />
 
       <h2>Base URL</h2>
-      <pre><code>{`https://your-gateway.up.railway.app`}</code></pre>
+      <DocCode language="bash">{`https://your-gateway.up.railway.app`}</DocCode>
       <p>All paths below are relative to this base.</p>
 
       <hr />
@@ -84,12 +92,12 @@ export default function ApiPage() {
       </table>
 
       <h3>POST /v1/intents — response</h3>
-      <pre><code>{`{
+      <DocCode language="json">{`{
   "intent_id": "0x...",
   "batch_id": "0x...",
   "estimated_execution_time": 28,
   "awaiting_user_transaction": true
-}`}</code></pre>
+}`}</DocCode>
 
       <h3>GET /v1/intents — query params</h3>
       <table>
@@ -115,7 +123,7 @@ export default function ApiPage() {
       </div>
 
       <h3>Batch object</h3>
-      <pre><code>{`{
+      <DocCode language="json">{`{
   "batch_id": "0x...",
   "close_time": 1700000030,
   "intent_count": 4,
@@ -125,7 +133,7 @@ export default function ApiPage() {
   "settled_at": "2024-01-01T00:00:55Z",
   "failure_reason": null,
   "failed_at": null
-}`}</code></pre>
+}`}</DocCode>
 
       <hr />
 
@@ -136,18 +144,18 @@ export default function ApiPage() {
       </div>
 
       <h3>GET /v1/gateway/public_key — response</h3>
-      <pre><code>{`{
+      <DocCode language="json">{`{
   "gateway_public_key": "0x..."
-}`}</code></pre>
+}`}</DocCode>
 
       <hr />
 
       <h2>Error format</h2>
       <p>All errors return a consistent JSON body:</p>
-      <pre><code>{`{
+      <DocCode language="json">{`{
   "error": "intent_not_found",
   "message": "No intent with that ID exists"
-}`}</code></pre>
+}`}</DocCode>
       <p>Common status codes:</p>
       <table>
         <thead>

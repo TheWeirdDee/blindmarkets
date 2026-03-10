@@ -1,8 +1,6 @@
 import Link from 'next/link';
-
-const Code = ({ children }: { children: string }) => (
-  <pre><code>{children}</code></pre>
-);
+import { DocCode } from '@/components/DocCode';
+import { DocCallout } from '@/components/DocCallout';
 
 export default function SdkPage() {
   return (
@@ -17,10 +15,8 @@ export default function SdkPage() {
       <hr />
 
       <h2>Install</h2>
-      <Code>{`npm install @blindmarkets/sdk`}</Code>
-      <p>
-        Or with yarn / pnpm / bun — same package name.
-      </p>
+      <DocCode language="bash">{`npm install @blindmarkets/sdk`}</DocCode>
+      <p>Or with yarn / pnpm / bun — same package name.</p>
 
       <hr />
 
@@ -30,7 +26,8 @@ export default function SdkPage() {
         and server errors with exponential backoff, and cancels stalled requests after a
         configurable timeout.
       </p>
-      <Code>{`import { GatewayClient } from '@blindmarkets/sdk';
+      <DocCode filename="client.ts" language="typescript">{`
+import { GatewayClient } from '@blindmarkets/sdk';
 
 const client = new GatewayClient({
   baseUrl: 'https://your-gateway.up.railway.app',
@@ -41,7 +38,8 @@ const client = new GatewayClient({
   retryBaseDelayMs: 200,
   retryMaxDelayMs: 5_000,
   retryJitterMs: 100,
-});`}</Code>
+});
+      `}</DocCode>
 
       <hr />
 
@@ -51,7 +49,8 @@ const client = new GatewayClient({
         your wallet needs to sign. It validates every field before returning — bad inputs throw
         a <code>ValidationError</code>, not a silent failure later.
       </p>
-      <Code>{`import { IntentBuilder } from '@blindmarkets/sdk';
+      <DocCode filename="build-intent.ts" language="typescript">{`
+import { IntentBuilder } from '@blindmarkets/sdk';
 
 const intent = new IntentBuilder()
   .userAddress('0xYOUR_WALLET_ADDRESS')
@@ -62,8 +61,8 @@ const intent = new IntentBuilder()
   .maxFeeBps(50)                         // 0.5% max solver fee
   .deadlineSeconds(300n)                 // expires in 5 minutes
   .privacyMode('HIDDEN_AMOUNT')          // hide the amounts
-  .build();`}</Code>
-
+  .build();
+      `}</DocCode>
       <p>
         The builder generates a random nonce automatically and derives the intent ID, amount
         commitment, and intent hash from your inputs. You get back a fully formed{' '}
@@ -75,10 +74,11 @@ const intent = new IntentBuilder()
       <h2>Encrypt and submit</h2>
       <p>
         Before sending to the gateway, encrypt the intent using the gateway's public key.
-        The encryption uses X25519 key exchange and AES-GCM — your actual amounts are never
+        The encryption uses X25519 key exchange and AES-256-GCM — your actual amounts are never
         sent in plain text.
       </p>
-      <Code>{`import { encryptIntentForGateway, createCommitment } from '@blindmarkets/sdk';
+      <DocCode filename="submit.ts" language="typescript">{`
+import { encryptIntentForGateway, createCommitment } from '@blindmarkets/sdk';
 
 // Fetch the gateway's current public key
 const { gateway_public_key } = await client.getGatewayPublicKey();
@@ -101,8 +101,9 @@ const response = await client.submitIntent({
   nonce: intent.nonce,
 });
 
-console.log(response.batch_id);          // which batch window this landed in
-console.log(response.awaiting_user_transaction); // true — wallet tx still needed`}</Code>
+console.log(response.batch_id);                  // which batch window this landed in
+console.log(response.awaiting_user_transaction); // true — wallet tx still needed
+      `}</DocCode>
 
       <hr />
 
@@ -112,7 +113,8 @@ console.log(response.awaiting_user_transaction); // true — wallet tx still nee
         Use <code>starknet.js</code> or the wallet's provider to invoke{' '}
         <code>commit_intent</code> on the IntentRegistry contract:
       </p>
-      <Code>{`import { Contract, RpcProvider, WalletAccount } from 'starknet';
+      <DocCode filename="commit-onchain.ts" language="typescript">{`
+import { Contract, RpcProvider, WalletAccount } from 'starknet';
 
 const provider = new RpcProvider({ nodeUrl: 'https://starknet-sepolia.drpc.org' });
 const account = new WalletAccount(provider, window.starknet);
@@ -137,12 +139,20 @@ await client.reconcileOnchainIntent(intent.intentId, {
   action: 'COMMITTED',
   user_address: intent.userAddress,
   tx_hash: tx.transaction_hash,
-});`}</Code>
+});
+      `}</DocCode>
+
+      <DocCallout type="note" title="Why two steps?">
+        Submitting to the gateway and committing on-chain are separate so the encrypted payload
+        reaches the gateway before the on-chain fingerprint is visible. This prevents timing attacks
+        where someone sees the chain tx and races to read the gateway.
+      </DocCallout>
 
       <hr />
 
       <h2>Poll for status</h2>
-      <Code>{`const status = await client.getIntentStatus(intent.intentId);
+      <DocCode filename="poll-status.ts" language="typescript">{`
+const status = await client.getIntentStatus(intent.intentId);
 // status.status: 'pending' | 'committed' | 'in_batch' | 'settled' | 'failed' | 'cancelled' | 'expired'
 
 // Or list all your intents
@@ -151,18 +161,18 @@ const { intents } = await client.listIntents({
   status: 'settled',
   limit: 20,
   offset: 0,
-});`}</Code>
+});
+      `}</DocCode>
 
       <hr />
 
       <h2>Error handling</h2>
-      <p>
-        The SDK throws two error types. Import them to catch specifically:
-      </p>
-      <Code>{`import { ValidationError, NetworkError } from '@blindmarkets/sdk';
+      <p>The SDK throws two error types. Import them to catch specifically:</p>
+      <DocCode filename="error-handling.ts" language="typescript">{`
+import { ValidationError, NetworkError } from '@blindmarkets/sdk';
 
 try {
-  const intent = new IntentBuilder().build(); // will throw — missing fields
+  const intent = new IntentBuilder().build(); // throws — missing required fields
 } catch (e) {
   if (e instanceof ValidationError) {
     console.error('Bad input:', e.message);
@@ -170,7 +180,8 @@ try {
   if (e instanceof NetworkError) {
     console.error('Gateway unreachable or returned an error:', e.message);
   }
-}`}</Code>
+}
+      `}</DocCode>
       <ul>
         <li><code>ValidationError</code> — bad inputs, missing required fields, expired deadlines</li>
         <li><code>NetworkError</code> — gateway returned an error after all retries exhausted</li>
@@ -179,9 +190,7 @@ try {
       <hr />
 
       <h2>Full type reference</h2>
-      <p>
-        All types are exported from the package root. The key ones:
-      </p>
+      <p>All types are exported from the package root. The key ones:</p>
       <div className="not-prose space-y-2 my-4">
         {[
           ['Intent', 'The fully built order object returned by IntentBuilder.build()'],
@@ -207,9 +216,15 @@ try {
         construction, gateway client, retry logic. Useful if you're building a solver or a
         backend service that needs to interact with the gateway.
       </p>
-      <p>
-        It's not yet published to crates.io. Add it as a path or git dependency for now.
-      </p>
+
+      <DocCallout type="note">
+        The Rust SDK is not yet published to crates.io. Add it as a path or git dependency for now.
+      </DocCallout>
+
+      <DocCode filename="Cargo.toml" language="toml">{`
+[dependencies]
+blindmarkets-sdk = { git = "https://github.com/winszns/blindmarkets", subdirectory = "client-sdk" }
+      `}</DocCode>
 
       <div className="not-prose mt-8">
         <Link
