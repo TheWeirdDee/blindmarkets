@@ -35,12 +35,21 @@ export type SubmitIntentRequest = {
   user_signature: string[];
   client_public_key: string;
   nonce: string;
+  authorization_hash?: string;
+  submission_mode?: 'GATEWAY' | 'SELF_COMMIT';
 };
 
 export type SubmitIntentResponse = {
   intent_id: string;
   batch_id: string;
   estimated_execution_time: number;
+  awaiting_user_transaction: boolean;
+};
+
+export type OnchainLifecycleRequest = {
+  action: 'COMMITTED' | 'CANCELED';
+  user_address: string;
+  tx_hash: string;
 };
 
 export type GatewayPublicKeyResponse = {

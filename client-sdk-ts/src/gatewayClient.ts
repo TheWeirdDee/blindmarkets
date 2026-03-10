@@ -6,7 +6,8 @@ import {
   IntentStatusResponse,
   IntentListResponse,
   BatchListResponse,
-  BatchIntentListResponse
+  BatchIntentListResponse,
+  OnchainLifecycleRequest
 } from './types';
 
 export type GatewayClientConfig = {
@@ -77,6 +78,13 @@ export class GatewayClient {
         user_address: userAddress,
         signature
       })
+    });
+  }
+
+  async reconcileOnchainIntent(intentId: string, request: OnchainLifecycleRequest): Promise<void> {
+    await this.request<{ status?: string }>(`/v1/intents/${intentId}/onchain`, {
+      method: 'POST',
+      body: JSON.stringify(request),
     });
   }
 
