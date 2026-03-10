@@ -6,8 +6,13 @@ import type { IntentPayload } from './intentCrypto';
 export type WalletProviderKey = 'starknet' | 'starknet_braavos' | 'starknet_argentX';
 
 type InjectedWalletProvider = {
+  id?: string;
+  name?: string;
+  version?: string;
+  icon?: string;
   request: (args: { type: string; params?: Record<string, unknown> }) => Promise<unknown>;
   on: (event: string, listener: (...args: unknown[]) => void) => void;
+  off?: (event: string, listener: (...args: unknown[]) => void) => void;
   selectedAddress?: string;
 };
 
@@ -27,7 +32,7 @@ export const WALLET_PROVIDERS: Array<{ key: WalletProviderKey; label: string }> 
 
 export async function connectWallet(providerKey: WalletProviderKey): Promise<ConnectedWalletSession> {
   const provider = getInjectedProvider(providerKey);
-  const account = new WalletAccount({ nodeUrl: resolveRpcUrl() }, provider);
+  const account = new WalletAccount({ nodeUrl: resolveRpcUrl() }, provider as never);
   const accounts = await account.requestAccounts(false);
   const address = normalizeHex(accounts[0] ?? account.address ?? provider.selectedAddress ?? '');
   if (!address || address === '0x') {
@@ -46,7 +51,7 @@ export async function restoreWalletSession(
 ): Promise<ConnectedWalletSession | null> {
   try {
     const provider = getInjectedProvider(providerKey);
-    const account = new WalletAccount({ nodeUrl: resolveRpcUrl() }, provider);
+    const account = new WalletAccount({ nodeUrl: resolveRpcUrl() }, provider as never);
     const accounts = await account.requestAccounts(true);
     const address = normalizeHex(accounts[0] ?? account.address ?? provider.selectedAddress ?? '');
     if (!address || address === '0x') {
