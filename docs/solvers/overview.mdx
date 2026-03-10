@@ -1,0 +1,77 @@
+---
+title: Solver Overview
+description: What a solver does, how the auction works, and what you earn
+---
+
+## What is a solver?
+
+A solver is any participant who fills batches of trader orders. When a batch window closes, solvers receive the decrypted orders and race to find the best way to fill them. The solver with the best outcome for traders — most output, lowest fees — wins the auction and executes the settlement.
+
+Solvers are the mechanism that turns encrypted orders into real token transfers. Without solvers, no orders settle.
+
+---
+
+## How the auction works
+
+<Steps>
+  <Step title="Batch closes">
+    Every 30 seconds the coordinator closes the current batch window and announces the batch on-chain via the BatchAuction contract.
+  </Step>
+  <Step title="Solvers receive decrypted orders">
+    After the batch is announced, the gateway decrypts the orders and makes them available to registered solvers via the API.
+  </Step>
+  <Step title="Solvers compute solutions">
+    Each solver independently calculates the best way to fill all orders in the batch — routing through DEXes, filling from inventory, or matching orders against each other.
+  </Step>
+  <Step title="Solvers submit solutions">
+    Solvers call the BatchAuction contract with their proposed solution. The contract scores each submission based on: trader output amounts, solver fee, and solver track record.
+  </Step>
+  <Step title="Winner settles">
+    The solver with the highest score wins. They must then call BatchSettlement to execute the actual token transfers. If they fail to settle within the deadline, they are slashed.
+  </Step>
+</Steps>
+
+---
+
+## Scoring
+
+The BatchAuction contract scores solutions on three factors:
+
+| Factor | Description |
+|--------|-------------|
+| **Trader output** | How much each trader receives vs their minimum. Higher is better. |
+| **Solver fee** | The fee claimed from traders. Lower is better for traders. |
+| **Track record** | Historical settlement success rate. Good solvers get a small bonus. |
+
+The exact scoring formula is in `contracts/src/batch_auction.cairo`.
+
+---
+
+## What solvers earn
+
+Solvers earn the difference between the prices they route through and the prices traders locked in, plus any explicit fee (capped at the `max_fee_bps` each trader set).
+
+There is no guaranteed fee — solvers compete, and the winner is the one offering the best deal for traders.
+
+---
+
+## Requirements
+
+To participate as a solver:
+
+1. **Post a bond** — deposit STRK into the SolverBond contract. Minimum is 1 STRK on Sepolia.
+2. **Register** — your solver account must be active (bond deposited).
+3. **Access the API** — you'll need a gateway API key to fetch decrypted orders.
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Bonding" icon="coins" href="/solvers/bonding">
+    How to deposit your solver bond and what happens if you're slashed.
+  </Card>
+  <Card title="Submitting Solutions" icon="paper-plane" href="/solvers/submitting-solutions">
+    The mechanics of constructing and submitting a valid solution.
+  </Card>
+</CardGroup>

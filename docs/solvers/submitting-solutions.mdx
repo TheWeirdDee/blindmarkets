@@ -1,0 +1,109 @@
+---
+title: Submitting Solutions
+description: How to construct a valid solution, call the auction contract, and settle
+---
+
+## The solver loop
+
+A solver runs a continuous loop:
+
+1. Poll the gateway for newly announced batches
+2. Fetch decrypted orders for each batch
+3. Compute an optimal solution
+4. Submit the solution to the BatchAuction contract
+5. If you win, call BatchSettlement to execute
+
+The reference solver in `solver-reference/` implements this loop end-to-end. You can run it as-is or use it as a starting point for your own strategy.
+
+---
+
+## Running the reference solver
+
+```bash
+SOLVER_ACCOUNT_ADDRESS=0x... \
+SOLVER_ACCOUNT_PRIVATE_KEY=0x... \
+GATEWAY_URL=https://your-gateway.up.railway.app \
+GATEWAY_API_KEY=your-api-key \
+cargo run --release -p blindmarkets-solver
+```
+
+Or via Docker Compose — add it to your `docker-compose.yml` using the `solver-reference/Dockerfile`.
+
+---
+
+## Fetching open batches
+
+```bash
+GET /v1/batches?status=open
+Authorization: X-API-KEY: your-api-key
+```
+
+Response includes `batch_id`, `close_time`, `auction_deadline`, and `intent_count`.
+
+---
+
+## Fetching decrypted orders
+
+Once a batch is announced (status `open`), fetch the orders:
+
+```bash
+GET /v1/batches/{batchId}/intents
+Authorization: X-API-KEY: your-api-key
+```
+
+Each intent object includes the decrypted `asset_in`, `asset_out`, `amount`, `min_output`, `max_fee_bps`, and `deadline`.
+
+---
+
+## Constructing a solution
+
+A solution is an `ExecutionPlan` — a list of transfers that satisfy every order in the batch. For each order, your plan must transfer at least `min_output` of `asset_out` to the user's address, and collect at most `max_fee_bps` of the amount as your fee.
+
+You can satisfy orders by:
+- **Routing through a DEX** — compute the swap path and include the output in your plan
+- **Filling from inventory** — if you hold the output token, you can fill directly
+- **Matching orders** — if two orders in the batch are opposite sides of a trade, net them against each other
+
+The contract validates that your plan is balanced: total inflows equal total outflows for every asset.
+
+---
+
+## Submitting to BatchAuction
+
+Call `submit_solution` on the BatchAuction contract:
+
+```
+BatchAuction: 0x07e7783df0c502dc41e13fb37a5503e4e3d3d48994589d5ffddcab1c67be339c
+```
+
+Parameters:
+- `batch_id` — the batch you're solving
+- `execution_plan` — your list of transfers
+- `claimed_fee` — the fee you're charging (must be ≤ each order's `max_fee_bps`)
+
+The contract scores your solution immediately. If another solver already submitted a higher-scoring solution, yours is rejected.
+
+---
+
+## Settling after winning
+
+If your solution wins, you must call `BatchSettlement.execute` before the `auction_deadline` in the batch:
+
+```
+BatchSettlement: 0x05d779212e1adf78803bb6051550177c0a36cbb7dfd920ec2665ed76aa9e7eb5
+```
+
+This executes the actual token transfers atomically. If every transfer succeeds, the batch is marked settled and you receive your fees.
+
+<Warning>
+  If you fail to call `execute` before the deadline, you will be slashed. Monitor your solver process carefully and implement retry logic with appropriate gas settings.
+</Warning>
+
+---
+
+## Tips for competitive solvers
+
+- **Speed matters** — the scoring formula rewards better prices, but being first to submit prevents rivals from sniping
+- **Batch size varies** — small batches (1-3 orders) are easier to route but lower fee volume; large batches require more sophisticated routing
+- **Monitor gas** — if network congestion is high, budget extra gas for settlement to ensure it lands before the deadline
+- **Track your win rate** — the scoring formula gives a bonus to solvers with a strong track record, compounding your advantage over time

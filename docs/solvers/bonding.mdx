@@ -1,0 +1,79 @@
+---
+title: Bonding
+description: How to post a solver bond, what it covers, and what happens if you're slashed
+---
+
+## Why bonds exist
+
+Bonds align solver incentives with trader outcomes. A solver who wins an auction but fails to settle loses part of their bond. This makes it unprofitable to bid on batches you can't fill.
+
+---
+
+## Depositing a bond
+
+Call `deposit` on the SolverBond contract with the amount of STRK you want to bond. You must approve the STRK transfer first.
+
+**SolverBond address:** `0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8`
+
+Using `sncast`:
+
+```bash
+# 1. Approve STRK spend
+sncast --account your_account invoke \
+  --network sepolia \
+  --contract-address 0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d \
+  --function approve \
+  --calldata 0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8 1000000000000000000 0
+
+# 2. Deposit into SolverBond (1 STRK = 10^18)
+sncast --account your_account invoke \
+  --network sepolia \
+  --contract-address 0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8 \
+  --function deposit \
+  --calldata 1000000000000000000 0
+```
+
+**Minimum bond:** 1 STRK on Sepolia testnet.
+
+---
+
+## Checking your balance
+
+```bash
+sncast --account your_account call \
+  --network sepolia \
+  --contract-address 0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8 \
+  --function get_bond \
+  --calldata YOUR_SOLVER_ADDRESS
+```
+
+---
+
+## Slashing
+
+If a solver wins a batch auction but fails to call `BatchSettlement.execute` within the settlement deadline, they are slashed:
+
+- A percentage of their bond is deducted and transferred to a protocol treasury
+- Repeated failures can result in blacklisting from future auctions
+
+The slash percentage is configured at the protocol level (currently 10% of bond per failed settlement on Sepolia).
+
+<Warning>
+  If your solver process crashes after winning an auction, you must settle before the deadline or face a slash. Monitor your solver process closely and have a recovery path.
+</Warning>
+
+---
+
+## Withdrawing a bond
+
+You can withdraw your bond when you're not currently obligated to settle a batch:
+
+```bash
+sncast --account your_account invoke \
+  --network sepolia \
+  --contract-address 0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8 \
+  --function withdraw \
+  --calldata AMOUNT_FELT 0
+```
+
+There is a cooldown period after your last batch win before you can withdraw, to ensure you can't front-run the slashing mechanism.
