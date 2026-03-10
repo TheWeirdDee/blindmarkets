@@ -76,6 +76,123 @@ a {
   mask-composite: exclude;
 }
 
+/* ── Docs typography ────────────────────────────────────────────── */
+.prose-docs {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  max-width: 72ch;
+}
+.prose-docs h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  line-height: 1.2;
+}
+.prose-docs h2 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 2.5rem;
+  margin-bottom: 0.75rem;
+}
+.prose-docs h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+.prose-docs p {
+  margin-bottom: 1rem;
+}
+.prose-docs .lead {
+  font-size: 1.0625rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.5rem;
+}
+.prose-docs a {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.prose-docs a:hover {
+  opacity: 0.8;
+}
+.prose-docs hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  margin: 2rem 0;
+}
+.prose-docs strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.prose-docs ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.prose-docs ul li {
+  margin-bottom: 0.25rem;
+}
+.prose-docs ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+.prose-docs ol li {
+  margin-bottom: 0.25rem;
+}
+.prose-docs code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.8125rem;
+  background: rgba(0, 209, 255, 0.06);
+  color: var(--accent-primary);
+  padding: 0.15em 0.45em;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 209, 255, 0.12);
+}
+.prose-docs pre {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  overflow-x: auto;
+  margin: 1.25rem 0;
+}
+.prose-docs pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  border-radius: 0;
+}
+.prose-docs table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.25rem 0;
+  font-size: 0.875rem;
+}
+.prose-docs th {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.prose-docs td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: top;
+}
+
+/* ── Noise overlay ──────────────────────────────────────────────── */
 .noise-overlay {
   position: fixed;
   inset: 0;
