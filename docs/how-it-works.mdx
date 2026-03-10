@@ -1,0 +1,85 @@
+---
+title: How It Works
+description: The full order lifecycle from submission to settlement, explained simply
+---
+
+## The problem with public order books
+
+On most DEXes, every order you place is visible on-chain before it fills. That gives bots a window to trade against you. They see your order, buy the asset first, sell it back to you at a higher price, and pocket the difference. The bigger your order, the more you lose.
+
+BlindMarkets closes that window.
+
+---
+
+## Step 1 — You compose and encrypt your order
+
+You specify what you want: sell X of token A, receive at least Y of token B, by this deadline. You also pick a privacy level:
+
+| Mode | What others can see |
+|------|---------------------|
+| **Public** | Everything |
+| **Hidden Amount** | Direction only (e.g. BTC → USDC) |
+| **Hidden** | Nothing until the batch closes |
+
+Your browser encrypts the order before it leaves your device. Only the gateway can decrypt it, and even then only after the batch window closes.
+
+---
+
+## Step 2 — Your wallet commits on-chain
+
+Your wallet signs and submits a short on-chain transaction to Starknet. This transaction contains a fingerprint of your order (a hash), not the order itself. It locks your intent in place so nobody — not even the gateway — can change it later.
+
+---
+
+## Step 3 — Orders collect in a batch window
+
+Every 30 seconds, a batch window opens and closes. All orders submitted during that window are grouped together. When the window closes, the coordinator announces the batch on-chain.
+
+---
+
+## Step 4 — Solvers compete to fill the batch
+
+Once the batch is announced, solvers receive the decrypted orders and race to find the best way to fill them. A solver might:
+- Route through an on-chain DEX
+- Fill from their own inventory
+- Combine multiple orders against each other
+
+Each solver submits their proposed solution. The one with the best outcome for traders (most output, lowest fees) wins the auction.
+
+---
+
+## Step 5 — Settlement on Starknet
+
+The winning solver's solution is verified and executed on-chain. Token transfers happen atomically — either every order in the batch fills, or none do. No partial fills that leave traders stranded.
+
+---
+
+## What happens if a batch fails?
+
+If no solver wins the auction, or if the settlement transaction fails, the batch is marked as failed and all orders inside it are requeued for the next batch window. You don't lose anything — your funds were never moved.
+
+---
+
+## System overview
+
+```
+You (Browser)
+  │
+  ├─ Encrypt order
+  ├─ Sign with wallet
+  └─ Submit to Gateway API
+          │
+          ├─ Stored in PostgreSQL
+          ├─ Hash committed on Starknet (your wallet tx)
+          └─ Batch window closes every 30s
+                    │
+                    └─ Coordinator announces batch on-chain
+                              │
+                              └─ Solvers bid on the batch
+                                        │
+                                        └─ Winning solver settles on Starknet
+                                                  │
+                                                  └─ Observer picks up the event
+                                                            │
+                                                            └─ Your order shows as Settled
+```

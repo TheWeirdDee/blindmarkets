@@ -1,0 +1,87 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "BlindMarkets",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "/favicon.svg",
+  "colors": {
+    "primary": "#00d1ff",
+    "light": "#7bdfff",
+    "dark": "#0099bb",
+    "background": {
+      "dark": "#09131c"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "App",
+      "url": "https://blindmarkets.xyz"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "GitHub",
+    "url": "https://github.com/winszns/blindmarkets"
+  },
+  "tabs": [
+    {
+      "name": "API Reference",
+      "url": "api-reference"
+    }
+  ],
+  "navigation": [
+    {
+      "group": "Get Started",
+      "pages": [
+        "introduction",
+        "how-it-works",
+        "quickstart"
+      ]
+    },
+    {
+      "group": "For Traders",
+      "pages": [
+        "traders/overview",
+        "traders/submitting-an-order",
+        "traders/privacy-modes",
+        "traders/tracking-your-order"
+      ]
+    },
+    {
+      "group": "For Solvers",
+      "pages": [
+        "solvers/overview",
+        "solvers/bonding",
+        "solvers/submitting-solutions"
+      ]
+    },
+    {
+      "group": "For Developers",
+      "pages": [
+        "developers/sdk-typescript",
+        "developers/sdk-rust",
+        "developers/self-hosting"
+      ]
+    },
+    {
+      "group": "Contracts",
+      "pages": [
+        "contracts/overview",
+        "contracts/addresses"
+      ]
+    },
+    {
+      "group": "API Reference",
+      "pages": [
+        "api-reference/intents",
+        "api-reference/batches",
+        "api-reference/health"
+      ]
+    }
+  ],
+  "footerSocials": {
+    "twitter": "https://twitter.com/blindmarkets",
+    "github": "https://github.com/winszns/blindmarkets"
+  }
+}

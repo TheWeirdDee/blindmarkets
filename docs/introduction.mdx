@@ -1,0 +1,46 @@
+---
+title: Introduction
+description: What BlindMarkets is and why it exists
+---
+
+## What is BlindMarkets?
+
+BlindMarkets is a trading venue on Starknet where you can swap tokens without revealing your order to the market before it fills.
+
+On a normal exchange, everyone can see your order the moment you place it. Bots watch for large orders and jump ahead of them, getting a better price for themselves and leaving you with a worse fill. This is called front-running, and it costs traders real money every day.
+
+BlindMarkets fixes this by keeping your order encrypted until after a batch of orders has been collected. Once the batch closes, solvers compete to fill all orders at the best available price. By the time anyone can see what you wanted, the price is already locked in.
+
+---
+
+## Who is it for?
+
+<CardGroup cols={2}>
+  <Card title="Traders" icon="chart-line">
+    Swap tokens on Starknet without bots seeing your order first. Works for any size — small retail trades or large positions that would normally move the market.
+  </Card>
+  <Card title="Solvers" icon="bolt">
+    Connect to the solver network, post a bond, and earn fees by filling batches of orders. The best solution for each batch wins.
+  </Card>
+  <Card title="Developers" icon="code">
+    Integrate the TypeScript or Rust SDK to submit intents from your own app, or run a self-hosted gateway and solver for your users.
+  </Card>
+  <Card title="Teams & Investors" icon="building">
+    A fully on-chain, open-source trading infrastructure for Starknet. No custody of funds. Settlement verified by smart contracts.
+  </Card>
+</CardGroup>
+
+---
+
+## Key properties
+
+- **Orders stay hidden until the batch closes.** You choose how much to reveal: nothing, just the direction, or full details.
+- **Solvers compete on price.** Multiple solvers bid to fill each batch. The one with the best outcome for traders wins.
+- **Everything settles on Starknet.** No off-chain trust required. Your funds move on-chain or not at all.
+- **Open solver network.** Anyone can become a solver by posting a bond. Bad solvers are slashed.
+
+---
+
+## Deployed on Starknet Sepolia
+
+BlindMarkets is currently live on Starknet Sepolia testnet. See [Contract Addresses](/contracts/addresses) for the deployed addresses.
