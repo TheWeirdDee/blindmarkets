@@ -1,0 +1,92 @@
+---
+title: Quickstart
+description: Place your first order on BlindMarkets in under five minutes
+---
+
+<Note>
+  BlindMarkets is currently live on **Starknet Sepolia testnet**. You'll need a funded Sepolia wallet to follow this guide. Mainnet is coming after the audit.
+</Note>
+
+## What you'll need
+
+- [Argent X](https://www.argent.xyz/argent-x/) or [Braavos](https://braavos.app/) wallet installed in your browser
+- STRK on Sepolia for gas — get it free from the [Starknet faucet](https://starknet-faucet.vercel.app)
+- Any whitelisted testnet token (WBTC, USDC, STRK) to swap
+
+---
+
+## Step 1 — Connect your wallet
+
+Open [blindmarkets.xyz](https://blindmarkets.xyz) and click **Connect Wallet** in the top right corner.
+
+Select your wallet (Argent X or Braavos). Your address will appear in the navigation bar once connected.
+
+<Tip>
+  If you see "Wrong network", open your wallet settings and switch to **Starknet Sepolia**. The chain ID is `0x534e5f5345504f4c4941`.
+</Tip>
+
+---
+
+## Step 2 — Open the Intent Composer
+
+Go to the **Dashboard**. You'll see the order form on the left side of the screen.
+
+Fill in your order:
+- **Sell** — which token you're giving up and how much
+- **Receive** — which token you want and the minimum you'll accept
+- **Max fee** — the maximum solver fee you'll pay (in basis points; 50 = 0.5%)
+- **Deadline** — how long the order stays open if not filled (in minutes)
+- **Privacy** — how much solvers can see before the batch closes
+
+---
+
+## Step 3 — Submit and sign
+
+Click **Submit Order**. Two things happen:
+
+1. Your browser encrypts the order payload and sends it to the gateway
+2. Your wallet prompts you to sign an on-chain commitment transaction on Starknet
+
+Approve the wallet transaction. Once it confirms, your order is live and will be included in the next batch window.
+
+<Note>
+  The on-chain transaction commits a **hash** of your order, not the order itself. The actual amounts stay encrypted until the batch closes.
+</Note>
+
+---
+
+## Step 4 — Watch for settlement
+
+The dashboard shows your order's status in real time. A normal fill takes under a minute:
+
+| Status | What it means |
+|--------|---------------|
+| **Pending** | Submitted — wallet tx not yet confirmed |
+| **Committed** | Wallet tx confirmed on Starknet |
+| **In Auction** | Batch closed — solvers competing |
+| **Settled** | Filled — tokens are in your wallet |
+
+---
+
+## Step 5 — Verify on Starkscan
+
+Every settlement is a public Starknet transaction. Visit [sepolia.starkscan.co](https://sepolia.starkscan.co) and look up your wallet address to see your full order history.
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Privacy Modes" icon="eye-slash" href="/traders/privacy-modes">
+    Learn how to control exactly what solvers can see before your batch closes.
+  </Card>
+  <Card title="TypeScript SDK" icon="code" href="/developers/sdk-typescript">
+    Build your own integration using the SDK — intent construction, encryption, and status polling.
+  </Card>
+  <Card title="Self-hosting" icon="server" href="/developers/self-hosting">
+    Run your own gateway, coordinator, and observer on Docker or Railway.
+  </Card>
+  <Card title="Contracts" icon="file-contract" href="/contracts/addresses">
+    All six contract addresses on Starknet Sepolia testnet.
+  </Card>
+</CardGroup>

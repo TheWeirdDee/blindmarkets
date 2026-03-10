@@ -1,0 +1,60 @@
+---
+title: Tracking Your Order
+description: How to check order status, verify settlement on-chain, and cancel if needed
+---
+
+## Dashboard status view
+
+The Dashboard shows all your active and recent orders in real time. Each order displays its current status, the batch it's assigned to, and timestamps.
+
+---
+
+## Status reference
+
+| Status | What it means | What to do |
+|--------|--------------|------------|
+| **Pending** | Gateway received your order, but the wallet transaction hasn't confirmed yet | Wait — the wallet tx is processing on Starknet |
+| **Committed** | Wallet tx confirmed — order is locked on-chain | Nothing — waiting for the batch window to close |
+| **In Auction** | Batch is closed, solvers are competing to fill it | Nothing — settlement happens automatically |
+| **Settled** | Filled — tokens are in your wallet | Verify on Starkscan if you like |
+| **Failed** | Batch failed — no solver won or settlement reverted | Order is requeued automatically for next window |
+| **Expired** | Your deadline passed before settlement | Place a new order if still needed |
+| **Cancelled** | You cancelled before the auction started | Nothing — no funds moved |
+
+---
+
+## Verifying on Starkscan
+
+Every committed order has an on-chain transaction hash. Every settled order has a second transaction hash from the settlement. You can look up either on [Starkscan](https://sepolia.starkscan.co):
+
+1. Go to [sepolia.starkscan.co](https://sepolia.starkscan.co)
+2. Search for your wallet address
+3. Look for transactions to the `IntentRegistry` (commitment) and `BatchSettlement` (fill) contracts
+
+The settlement transaction shows the exact amounts transferred, the solver that won, and the batch ID.
+
+---
+
+## Cancelling an order
+
+You can cancel an order while it's in **Pending** or **Committed** status, before it's been included in an active auction.
+
+Go to the **Audit Log** page, find your order, and click Cancel. Your wallet will prompt you to sign a cancellation transaction on Starknet.
+
+<Warning>
+  Once a batch auction has started, cancellation is not possible. The process is underway on-chain and the order is committed to the batch.
+</Warning>
+
+---
+
+## What happens when a batch fails
+
+If the batch your order was in fails — either because no solver submitted a valid solution, or the settlement transaction reverted — your order is automatically moved to the next open batch window. You don't lose anything and you don't need to do anything.
+
+If you've been waiting a while and want to exit, you can cancel from the Audit Log as long as the status is still `Failed` and no new auction has started.
+
+---
+
+## Audit Log
+
+The Audit Log page shows a full timeline for each order — every status transition, the batch it landed in, the solver that won (if settled), and the on-chain transaction hashes. Use it to trace exactly what happened to any order.

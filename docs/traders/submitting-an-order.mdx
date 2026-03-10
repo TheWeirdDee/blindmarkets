@@ -1,0 +1,84 @@
+---
+title: Submitting an Order
+description: How to place an encrypted trade on BlindMarkets, from wallet connection to settlement
+---
+
+<Note>
+  BlindMarkets is on **Starknet Sepolia testnet**. You'll need STRK for gas — get it free at the [Starknet faucet](https://starknet-faucet.vercel.app).
+</Note>
+
+## Before you start
+
+You need:
+- Argent X or Braavos wallet, connected to Sepolia
+- STRK for gas fees
+- A whitelisted token to swap (STRK, WBTC, or USDC on Sepolia)
+
+---
+
+## Connect your wallet
+
+Click **Connect Wallet** in the top right of the app. Argent X and Braavos are both supported. Nothing happens on-chain until you submit an order — connecting is read-only.
+
+---
+
+## Build your order
+
+Open the **Dashboard** and fill in the Intent Composer on the left:
+
+**Sell** — the token you're giving up and how much.
+
+**Receive** — the token you want back and the minimum amount you'll accept. If solvers can't meet this minimum, your order won't fill.
+
+**Max fee** — the most you're willing to pay the solver, in basis points. `50` = 0.5%. Solvers compete to charge you less.
+
+**Deadline** — how many minutes until the order expires if it hasn't been filled. After expiry, nothing moves.
+
+**Privacy mode** — controls what solvers can see before the batch closes. See [Privacy Modes](/traders/privacy-modes) for the trade-offs.
+
+---
+
+## Submit and approve
+
+Click **Submit Order**. Two things happen in order:
+
+<Steps>
+  <Step title="Gateway receives the encrypted order">
+    Your browser encrypts the order payload and sends it to the gateway. The gateway stores an encrypted blob — it cannot read your amounts until the batch window closes.
+  </Step>
+  <Step title="Your wallet signs the on-chain commitment">
+    A wallet prompt appears asking you to sign a transaction to the IntentRegistry contract on Starknet. This commits a Pedersen hash of your order — not the order itself — on-chain. Approve it.
+  </Step>
+</Steps>
+
+<Warning>
+  You must approve the wallet transaction for your order to be valid. If you close the wallet prompt, the gateway still has your encrypted order but there's no on-chain commitment — the order will be rejected when the batch closes.
+</Warning>
+
+---
+
+## Wait for settlement
+
+Once the wallet transaction confirms, your order is in the current batch window. You don't need to do anything else.
+
+The batch closes within 30 seconds. Solvers then compete to fill it. A typical round-trip from submission to settlement is under 90 seconds.
+
+---
+
+## Order status lifecycle
+
+| Status | Description |
+|--------|-------------|
+| **Pending** | Submitted to gateway, wallet tx not yet confirmed |
+| **Committed** | Wallet tx confirmed on Starknet |
+| **In Auction** | Batch is closed, solvers competing |
+| **Settled** | Filled — tokens are in your wallet |
+| **Failed** | Batch failed — order requeued for next window |
+| **Expired** | Deadline passed before settlement |
+| **Cancelled** | You cancelled before the auction started |
+
+---
+
+## Verifying your settlement
+
+Every settled order is a Starknet transaction you can inspect on [Starkscan](https://sepolia.starkscan.co). Look up your wallet address to see the full history of commitments and settlements.

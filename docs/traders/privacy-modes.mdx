@@ -1,0 +1,70 @@
+---
+title: Privacy Modes
+description: Control exactly how much of your order is visible to solvers before the batch closes
+---
+
+## Why it matters
+
+Even in a blind pool, metadata leaks. If solvers can see that someone wants to buy a large amount of a thinly traded token, they can position themselves before the batch settles. Privacy modes let you choose exactly how much signal you emit.
+
+---
+
+## The three modes
+
+<CardGroup cols={1}>
+  <Card title="Public" icon="eye">
+    **All order details are visible to solvers.**
+
+    The asset pair, exact amounts, minimum output, and your wallet address are all visible. Solvers have the most information to work with, which typically produces the tightest competition and best prices.
+
+    Use this for small orders where front-running risk is low and you want maximum solver participation.
+  </Card>
+  <Card title="Hidden Amount" icon="eye-slash">
+    **Direction visible. Amounts hidden until settlement.**
+
+    Solvers can see you're swapping STRK for USDC, but not how much. The exact amount and minimum output are replaced with commitment hashes. Your wallet address is still visible.
+
+    Use this for mid-size orders where you want solvers to know the direction but not the size.
+  </Card>
+  <Card title="Hidden" icon="lock">
+    **Nothing visible until after the batch closes.**
+
+    The asset pair, amounts, and direction are all encrypted. Solvers receive the full order only after the batch is announced — at which point the fill price is already locked in.
+
+    Use this for large orders, sensitive positions, or any trade where you don't want to signal intent.
+  </Card>
+</CardGroup>
+
+---
+
+## What's always visible
+
+Regardless of privacy mode, your **wallet address** is always public — it's the account that signed the on-chain commitment transaction on Starknet. If your wallet address is known, the fact that you placed *an* order is visible even in Hidden mode. What stays hidden is what you ordered and for how much.
+
+---
+
+## How amounts stay hidden
+
+When you pick Hidden Amount or Hidden mode, your browser computes a **Pedersen hash** of the amount and a random nonce. This hash — called the amount commitment — goes on-chain. The actual number never does.
+
+When the batch settles, the BatchSettlement contract checks that the solver's fill matches the commitment. If the numbers don't match the hash, the transaction reverts. This is how amounts are kept private without sacrificing verifiability.
+
+---
+
+## Does privacy mode affect my fill price?
+
+Slightly, in practice. In Hidden mode, solvers have less information to work with, so they may price their solutions more conservatively. Public mode gives solvers the most to work with and typically produces the tightest competition on price.
+
+For most retail-sized orders, the difference is negligible. For large block trades, the privacy benefit usually outweighs the small price impact.
+
+---
+
+## Summary table
+
+| | Public | Hidden Amount | Hidden |
+|--|--------|--------------|--------|
+| Asset pair | Visible | Visible | Hidden |
+| Exact amount | Visible | Hidden | Hidden |
+| Minimum output | Visible | Hidden | Hidden |
+| Wallet address | Visible | Visible | Visible |
+| Solver competition | Maximum | High | Conservative |

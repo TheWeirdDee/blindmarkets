@@ -1,0 +1,63 @@
+---
+title: Overview
+description: What BlindMarkets offers for traders and how it's different from a regular DEX
+---
+
+## What's different about trading here
+
+On a standard DEX, every order you place is public the moment you submit it. Bots monitor the mempool, see your order, and trade ahead of you. By the time your transaction confirms, the price has already moved. The bigger your order, the more you lose to this — it's called front-running.
+
+BlindMarkets fixes this by keeping your order encrypted in a shared pool until a batch window closes. Only then are orders handed to solvers, who compete to fill them at the best available price. By the time anyone can see what you ordered, the fill price is already locked.
+
+---
+
+## What you can trade
+
+Any token pair where both tokens are registered in the AssetRegistry. On Sepolia testnet, the active pairs include STRK, WBTC, and USDC. New tokens can be added via governance.
+
+---
+
+## How fills work
+
+You don't interact with a liquidity pool or an order book directly. Instead:
+
+1. You submit an encrypted order with a minimum output you'll accept
+2. Solvers compete to fill your order — routing through DEXes, their own inventory, or matching with other orders in the batch
+3. The winning solver's solution is verified on-chain, and token transfers execute atomically
+
+If the solver's proposed output is below your minimum, the order is not filled and no funds move.
+
+---
+
+## Privacy levels
+
+You choose how much solvers can see before the batch closes:
+
+| Mode | What's visible |
+|------|---------------|
+| **Public** | Full order details |
+| **Hidden Amount** | Direction only (e.g. STRK → USDC), amounts hidden |
+| **Hidden** | Nothing — encrypted payload only |
+
+See [Privacy Modes](/traders/privacy-modes) for a full breakdown and guidance on when to use each.
+
+---
+
+## Fees
+
+You set a **maximum fee** in basis points (e.g. 50 = 0.5%). Solvers compete to fill your order for as little fee as possible — the solver with the best net outcome for you wins the auction. You only pay fees if the order settles.
+
+Gas for the on-chain commitment transaction is paid by your wallet in STRK.
+
+---
+
+## Ready to place your first order?
+
+<CardGroup cols={2}>
+  <Card title="Submitting an Order" icon="arrow-right" href="/traders/submitting-an-order">
+    Step-by-step guide to placing your first trade.
+  </Card>
+  <Card title="Privacy Modes" icon="eye-slash" href="/traders/privacy-modes">
+    Understand what each privacy level hides and when to use it.
+  </Card>
+</CardGroup>
