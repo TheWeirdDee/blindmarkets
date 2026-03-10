@@ -1,8 +1,9 @@
+import type { Metadata } from 'next';
 import './globals.css';
 
-export const metadata = {
-  title: 'BlindMarkets Protocol',
-  description: 'Private, MEV-resistant Bitcoin intent execution on Starknet.'
+export const metadata: Metadata = {
+  title: 'BlindMarkets',
+  description: 'Private Bitcoin intent execution on Starknet. Submit encrypted orders, commit from your wallet, let solvers compete on price after the batch closes.',
 };
 
 export default function RootLayout({
