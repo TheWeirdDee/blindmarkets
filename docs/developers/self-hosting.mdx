@@ -1,0 +1,133 @@
+---
+title: Self-Hosting
+description: Run your own gateway, coordinator, and observer on Docker or Railway
+---
+
+## What you're running
+
+| Service | Role |
+|---------|------|
+| **gateway** | Rust API server. Accepts intents, manages the database, relays to solvers. |
+| **coordinator** | Rust scheduler. Opens and closes batch windows on-chain every 30 seconds. |
+| **observer** | Rust indexer. Watches Starknet for settlement events and updates the database. |
+| **postgres** | Intent, batch, and audit history storage. |
+| **redis** | Rate limit counters and nonce windows. No persistent state — resets on restart. |
+
+The frontend is a Next.js app deployed on Vercel separately. It talks to the gateway over HTTP.
+
+---
+
+## Prerequisites
+
+- Docker and Docker Compose installed
+- A Starknet Sepolia account funded with STRK (for coordinator and gateway transactions)
+- The repo cloned locally
+
+<Warning>
+  The gateway and coordinator both send on-chain transactions. They can share the same private key for testnet (nonce collisions are rare given the 30-second batch cadence), but for production use separate accounts.
+</Warning>
+
+---
+
+## 1. Clone and configure
+
+```bash
+git clone https://github.com/winszns/blindmarkets
+cd blindmarkets
+cp .env.compose.example .env
+```
+
+Open `.env` and fill in:
+
+- **`GATEWAY_API_KEY`** — any random string. Generate one with `openssl rand -hex 32`
+- **`GATEWAY_ACCOUNT_ADDRESS`** and **`GATEWAY_ACCOUNT_PRIVATE_KEY`** — your Starknet Sepolia account
+- **`COORDINATOR_ACCOUNT_ADDRESS`** and **`COORDINATOR_PRIVATE_KEY`** — your Starknet Sepolia account (can be the same as gateway for testnet)
+
+Everything else — contract addresses, RPC URL, event keys — is already set to the correct Sepolia values.
+
+---
+
+## 2. Register your gateway
+
+The gateway account must be registered in the `GatewayRegistry` contract before it can relay intents. Run this once:
+
+```bash
+sncast --account your_account invoke \
+  --network sepolia \
+  --contract-address 0x0572569d692b6711f7da40d9d196bccf56b703cf8dafe03580aa713e974557b0 \
+  --function register_gateway \
+  --calldata YOUR_GATEWAY_ADDRESS YOUR_GATEWAY_PUBLIC_KEY
+```
+
+Get your public key with: `sncast account list` — look for the `public key` field next to your account.
+
+---
+
+## 3. Start the stack
+
+```bash
+docker compose up --build
+```
+
+The first build takes a few minutes — Rust compiles from source. Rebuilds are fast because Docker caches the dependency layer.
+
+Services come up in order: postgres and redis first, then gateway, then coordinator and observer once the gateway is healthy.
+
+**Local URLs:**
+
+| Service | URL |
+|---------|-----|
+| Gateway API | `http://localhost:3000` |
+| Health check | `http://localhost:3000/health` |
+| PostgreSQL | `localhost:5432` |
+| Redis | `localhost:6379` |
+
+---
+
+## 4. Point the frontend at your gateway
+
+In your Vercel project settings or `frontend/.env.local`:
+
+```bash
+GATEWAY_URL=http://localhost:3000        # or your public URL
+GATEWAY_API_KEY=your-api-key
+GATEWAY_API_KEY_HEADER=X-API-KEY
+```
+
+---
+
+## Deploying on Railway
+
+Railway is the easiest way to host the backend publicly.
+
+1. Create a Railway project
+2. Add **PostgreSQL** and **Redis** plugins
+3. Add three services from the same GitHub repo, setting `RAILWAY_DOCKERFILE_PATH` for each:
+
+| Service | `RAILWAY_DOCKERFILE_PATH` |
+|---------|--------------------------|
+| gateway | `backend/gateway/Dockerfile` |
+| coordinator | `backend/coordinator/Dockerfile` |
+| observer | `backend/observer/Dockerfile` |
+
+4. Copy your `.env` variables into each service's Variables tab
+5. For coordinator and observer, set `GATEWAY_URL=http://gateway.railway.internal:3000` (internal networking)
+6. Set `DATABASE_URL=${{Postgres.DATABASE_URL}}` and `REDIS_URL=${{Redis.REDIS_URL}}` using Railway reference syntax
+
+<Tip>
+  Internal Railway networking (`service.railway.internal:PORT`) avoids egress charges and is faster than going through the public URL.
+</Tip>
+
+---
+
+## Running a solver
+
+```bash
+SOLVER_ACCOUNT_ADDRESS=0x... \
+SOLVER_ACCOUNT_PRIVATE_KEY=0x... \
+GATEWAY_URL=http://localhost:3000 \
+GATEWAY_API_KEY=your-key \
+cargo run --release -p blindmarkets-solver
+```
+
+The solver must have a bond deposited in SolverBond before it can submit solutions. Minimum bond is 1 STRK. See [Bonding](/solvers/bonding) for instructions.

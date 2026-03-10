@@ -1,0 +1,130 @@
+---
+title: Rust SDK
+description: Use the Rust SDK in client-sdk/ to build solvers and backend services that interact with the gateway
+---
+
+## Overview
+
+The Rust SDK lives in `client-sdk/` in the monorepo. It provides the same core building blocks as the TypeScript SDK — intent construction, gateway HTTP client, encryption, and retry logic — but as a native Rust crate. It's the right choice if you're:
+
+- Building a solver that submits solutions on-chain
+- Building a backend service that needs to submit or query intents
+- Writing infrastructure that interacts with the gateway from a server environment
+
+---
+
+## Adding as a dependency
+
+The crate is not yet published to crates.io. Add it as a git dependency:
+
+```toml
+[dependencies]
+blindmarkets-sdk = { git = "https://github.com/winszns/blindmarkets", subdirectory = "client-sdk" }
+```
+
+Or as a path dependency if you're working inside the monorepo:
+
+```toml
+[dependencies]
+blindmarkets-sdk = { path = "../client-sdk" }
+```
+
+---
+
+## Initialize the client
+
+```rust
+use blindmarkets_sdk::GatewayClient;
+
+let client = GatewayClient::new(
+    "https://your-gateway.up.railway.app",
+    "your-api-key",
+);
+```
+
+The client uses `reqwest` internally and applies exponential backoff on retries.
+
+---
+
+## Build an intent
+
+```rust
+use blindmarkets_sdk::{IntentBuilder, PrivacyMode};
+
+let intent = IntentBuilder::new()
+    .user_address("0xYOUR_WALLET_ADDRESS")
+    .asset_in("0xSTRK_CONTRACT_ADDRESS")
+    .asset_out("0xUSDC_CONTRACT_ADDRESS")
+    .amount(1_000_000_000_000_000_000u128)
+    .min_output(2_000_000u128)
+    .max_fee_bps(50)
+    .deadline_seconds(300)
+    .privacy_mode(PrivacyMode::HiddenAmount)
+    .build()?;
+```
+
+---
+
+## Encrypt and submit
+
+```rust
+use blindmarkets_sdk::{encrypt_intent_for_gateway, create_commitment};
+
+// Fetch the gateway's public key
+let pub_key = client.get_gateway_public_key().await?;
+
+// Encrypt the intent payload
+let encrypted = encrypt_intent_for_gateway(&intent, &pub_key).await?;
+
+// Build the on-chain commitment
+let commitment = create_commitment(&intent);
+
+// Submit to gateway
+let response = client.submit_intent(&blindmarkets_sdk::SubmitIntentRequest {
+    intent_id:             intent.intent_id.clone(),
+    user_address:          intent.user_address.clone(),
+    ciphertext:            encrypted.ciphertext_hex,
+    encrypted_session_key: encrypted.encrypted_session_key_hex,
+    client_public_key:     encrypted.client_public_key_hex,
+    commitment:            commitment.intent_hash.clone(),
+    user_signature:        vec![],
+    nonce:                 intent.nonce.clone(),
+}).await?;
+```
+
+---
+
+## Query intents and batches
+
+```rust
+// Get intent status
+let status = client.get_intent_status(&intent_id).await?;
+
+// List batches
+let batches = client.list_batches(blindmarkets_sdk::BatchFilter {
+    status: Some("open".into()),
+    limit: 10,
+    offset: 0,
+}).await?;
+
+// Get intents for a batch
+let intents = client.list_batch_intents(&batch_id).await?;
+```
+
+---
+
+## Reference solver
+
+The `solver-reference/` directory contains a working solver built on top of the Rust SDK. It implements the full solver loop:
+
+1. Poll gateway for open batches
+2. Fetch decrypted orders
+3. Compute a naive routing solution (direct DEX swap)
+4. Submit to `BatchAuction`
+5. If win is detected, call `BatchSettlement`
+
+Read the source at `solver-reference/src/main.rs` for the complete implementation.
+
+<Note>
+  The reference solver uses a simple routing strategy. For production, you'd replace the routing logic with your own DEX integration, inventory management, or order matching.
+</Note>

@@ -1,0 +1,184 @@
+---
+title: TypeScript SDK
+description: Install and use @blindmarkets/sdk to build on top of BlindMarkets from Node.js or the browser
+---
+
+## Install
+
+```bash
+npm install @blindmarkets/sdk
+```
+
+Works with yarn, pnpm, and bun too. The package is ESM-compatible and ships TypeScript types.
+
+---
+
+## Initialize the client
+
+`GatewayClient` handles all HTTP communication. It retries on rate limits and server errors with exponential backoff.
+
+```typescript
+import { GatewayClient } from '@blindmarkets/sdk';
+
+const client = new GatewayClient({
+  baseUrl: 'https://your-gateway.up.railway.app',
+  apiKeyHeader: 'X-API-KEY',
+  apiKey: process.env.GATEWAY_API_KEY!,
+  timeoutMs: 10_000,
+  maxRetries: 3,
+  retryBaseDelayMs: 200,
+  retryMaxDelayMs: 5_000,
+  retryJitterMs: 100,
+});
+```
+
+---
+
+## Build an intent
+
+`IntentBuilder` constructs the order object and computes all commitments your wallet needs to sign. It validates every field before returning — missing or invalid inputs throw a `ValidationError` immediately.
+
+```typescript
+import { IntentBuilder } from '@blindmarkets/sdk';
+
+const intent = new IntentBuilder()
+  .userAddress('0xYOUR_WALLET_ADDRESS')
+  .assetIn('0xSTRK_CONTRACT_ADDRESS')
+  .assetOut('0xUSDC_CONTRACT_ADDRESS')
+  .amount(1_000_000_000_000_000_000n)   // 1 STRK (18 decimals)
+  .minOutput(2_000_000n)                 // 2 USDC (6 decimals)
+  .maxFeeBps(50)                         // 0.5% max solver fee
+  .deadlineSeconds(300n)                 // expires in 5 minutes
+  .privacyMode('HIDDEN_AMOUNT')
+  .build();
+```
+
+The builder generates a random nonce and derives the intent ID, amount commitment, and intent hash. You get back a fully formed `Intent` object.
+
+---
+
+## Encrypt and submit
+
+Before sending to the gateway, encrypt the intent using the gateway's current X25519 public key. The SDK uses AES-256-GCM — actual amounts never travel in plain text.
+
+```typescript
+import { encryptIntentForGateway, createCommitment } from '@blindmarkets/sdk';
+
+// Fetch the gateway's current public key
+const { gateway_public_key } = await client.getGatewayPublicKey();
+
+// Encrypt the intent payload
+const encrypted = await encryptIntentForGateway(intent, gateway_public_key);
+
+// Build the on-chain commitment fields
+const commitment = createCommitment(intent);
+
+// Submit to gateway
+const response = await client.submitIntent({
+  intent_id:              intent.intentId,
+  user_address:           intent.userAddress,
+  ciphertext:             encrypted.ciphertextHex,
+  encrypted_session_key:  encrypted.encryptedSessionKeyHex,
+  client_public_key:      encrypted.clientPublicKeyHex,
+  commitment:             commitment.intentHash,
+  user_signature:         [],   // filled in after wallet signs (see below)
+  nonce:                  intent.nonce,
+});
+
+// response.awaiting_user_transaction === true
+// response.batch_id — which batch window this landed in
+```
+
+---
+
+## Commit on-chain with the wallet
+
+After submitting to the gateway, send the on-chain commitment transaction via `starknet.js`:
+
+```typescript
+import { Contract, RpcProvider, WalletAccount } from 'starknet';
+
+const provider = new RpcProvider({ nodeUrl: 'https://starknet-sepolia.drpc.org' });
+const account  = new WalletAccount(provider, window.starknet);
+const registry = new Contract(INTENT_REGISTRY_ABI, INTENT_REGISTRY_ADDRESS, account);
+
+const tx = await registry.commit_intent(
+  commitment.intentId,
+  commitment.intentHash,
+  commitment.amountCommitment,
+  commitment.minOutputCommitment,
+  commitment.maxFeeBps,
+  commitment.deadline,
+  privacyModeToFelt(commitment.privacyMode),
+  commitment.nonce,
+);
+
+await provider.waitForTransaction(tx.transaction_hash);
+
+// Notify the gateway the wallet tx confirmed
+await client.reconcileOnchainIntent(intent.intentId, {
+  action:       'COMMITTED',
+  user_address: intent.userAddress,
+  tx_hash:      tx.transaction_hash,
+});
+```
+
+<Note>
+  `INTENT_REGISTRY_ADDRESS` is `0x02ba178fd7b7a44483747d1bba06ec08a61917ebf3e6489fbf118a25f2613f2b` on Starknet Sepolia.
+</Note>
+
+---
+
+## Poll for status
+
+```typescript
+const status = await client.getIntentStatus(intent.intentId);
+// status.status: 'pending' | 'committed' | 'in_batch' | 'settled' | 'failed' | 'cancelled' | 'expired'
+
+// List all orders for an address
+const { intents } = await client.listIntents({
+  userAddress: '0xYOUR_ADDRESS',
+  status: 'settled',
+  limit: 20,
+  offset: 0,
+});
+```
+
+---
+
+## Error handling
+
+The SDK throws two typed errors:
+
+```typescript
+import { ValidationError, NetworkError } from '@blindmarkets/sdk';
+
+try {
+  const intent = new IntentBuilder().build(); // throws — missing required fields
+} catch (e) {
+  if (e instanceof ValidationError) {
+    // bad inputs, missing fields, expired deadlines
+    console.error('Bad input:', e.message);
+  }
+  if (e instanceof NetworkError) {
+    // gateway returned an error after all retries exhausted
+    console.error('Gateway error:', e.message, 'status:', e.statusCode);
+  }
+}
+```
+
+---
+
+## Type reference
+
+All types are exported from the package root:
+
+| Type | Description |
+|------|-------------|
+| `Intent` | Fully built order returned by `IntentBuilder.build()` |
+| `IntentCommitment` | On-chain commitment fields from `createCommitment()` |
+| `PrivacyMode` | `'PUBLIC' \| 'HIDDEN_AMOUNT' \| 'HIDDEN_DIRECTION_AND_AMOUNT'` |
+| `SubmitIntentRequest` | Shape of the `POST /v1/intents` body |
+| `IntentStatusResponse` | Return type of `getIntentStatus()` |
+| `BatchListItem` | One entry from `listBatches()` |
+| `GatewayClientConfig` | Constructor config for `GatewayClient` |
