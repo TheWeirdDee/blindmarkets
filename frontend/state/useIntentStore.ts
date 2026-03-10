@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type IntentDraft = {
   assetIn: string;
@@ -14,7 +15,12 @@ type IntentState = {
   draft: IntentDraft;
   setDraft: (draft: Partial<IntentDraft>) => void;
   walletAddress: string;
-  setWalletAddress: (address: string) => void;
+  walletProviderKey: 'starknet' | 'starknet_braavos' | 'starknet_argentX' | null;
+  setWalletSession: (
+    address: string,
+    providerKey: 'starknet' | 'starknet_braavos' | 'starknet_argentX'
+  ) => void;
+  clearWalletSession: () => void;
 };
 
 const defaultDraft: IntentDraft = {
@@ -36,11 +42,32 @@ function parseNumberEnv(name: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-export const useIntentStore = create<IntentState>((set) => ({
-  draft: defaultDraft,
-  setDraft: (draft) => set((state) => ({
-    draft: { ...state.draft, ...draft }
-  })),
-  walletAddress: '',
-  setWalletAddress: (address) => set(() => ({ walletAddress: address }))
-}));
+export const useIntentStore = create<IntentState>()(
+  persist(
+    (set) => ({
+      draft: defaultDraft,
+      setDraft: (draft) => set((state) => ({
+        draft: { ...state.draft, ...draft }
+      })),
+      walletAddress: '',
+      walletProviderKey: null,
+      setWalletSession: (address, providerKey) => set(() => ({
+        walletAddress: address,
+        walletProviderKey: providerKey,
+      })),
+      clearWalletSession: () => set(() => ({
+        walletAddress: '',
+        walletProviderKey: null,
+      })),
+    }),
+    {
+      name: 'blindmarkets-intent-store',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        draft: state.draft,
+        walletAddress: state.walletAddress,
+        walletProviderKey: state.walletProviderKey,
+      }),
+    }
+  )
+);
