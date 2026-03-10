@@ -1,6 +1,6 @@
 const addr = (address: string) => (
   <a
-    href={`https://sepolia.starkscan.co/contract/${address}`}
+    href={`https://sepolia.voyager.online/contract/${address}`}
     target="_blank"
     rel="noreferrer"
     className="font-mono text-xs break-all"
@@ -16,7 +16,7 @@ export default function ContractsPage() {
       <h1>Deployed Addresses</h1>
       <p className="lead">
         All contracts are live on <strong>Starknet Sepolia</strong> testnet. Click any address to
-        view it on Starkscan.
+        view it on Voyager.
       </p>
 
       <hr />
@@ -84,8 +84,8 @@ export default function ContractsPage() {
           <tr>
             <td>Block explorer</td>
             <td>
-              <a href="https://sepolia.starkscan.co" target="_blank" rel="noreferrer">
-                sepolia.starkscan.co
+              <a href="https://sepolia.voyager.online" target="_blank" rel="noreferrer">
+                sepolia.voyager.online
               </a>
             </td>
           </tr>

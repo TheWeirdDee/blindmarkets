@@ -92,7 +92,7 @@ export default function HowItWorks() {
           <p>
             The observer watches Starknet for settlement events. When it sees the batch settle, it
             notifies the gateway, which marks your order as settled. The dashboard updates. You can
-            verify the transaction on Starkscan at any time.
+            verify the transaction on Voyager at any time.
           </p>
         </DocStep>
       </DocSteps>

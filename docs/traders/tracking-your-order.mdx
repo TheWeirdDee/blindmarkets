@@ -16,18 +16,18 @@ The Dashboard shows all your active and recent orders in real time. Each order d
 | **Pending** | Gateway received your order, but the wallet transaction hasn't confirmed yet | Wait — the wallet tx is processing on Starknet |
 | **Committed** | Wallet tx confirmed — order is locked on-chain | Nothing — waiting for the batch window to close |
 | **In Auction** | Batch is closed, solvers are competing to fill it | Nothing — settlement happens automatically |
-| **Settled** | Filled — tokens are in your wallet | Verify on Starkscan if you like |
+| **Settled** | Filled — tokens are in your wallet | Verify on Voyager if you like |
 | **Failed** | Batch failed — no solver won or settlement reverted | Order is requeued automatically for next window |
 | **Expired** | Your deadline passed before settlement | Place a new order if still needed |
 | **Cancelled** | You cancelled before the auction started | Nothing — no funds moved |
 
 ---
 
-## Verifying on Starkscan
+## Verifying on Voyager
 
-Every committed order has an on-chain transaction hash. Every settled order has a second transaction hash from the settlement. You can look up either on [Starkscan](https://sepolia.starkscan.co):
+Every committed order has an on-chain transaction hash. Every settled order has a second transaction hash from the settlement. You can look up either on [Voyager](https://sepolia.voyager.online):
 
-1. Go to [sepolia.starkscan.co](https://sepolia.starkscan.co)
+1. Go to [sepolia.voyager.online](https://sepolia.voyager.online)
 2. Search for your wallet address
 3. Look for transactions to the `IntentRegistry` (commitment) and `BatchSettlement` (fill) contracts
 

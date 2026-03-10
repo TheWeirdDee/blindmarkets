@@ -91,7 +91,7 @@ export default function TradersPage() {
         <DocStep n={5} title="Verify on-chain">
           <p>
             Every settlement is a real Starknet transaction. Go to{' '}
-            <a href="https://sepolia.starkscan.co" target="_blank" rel="noreferrer">Starkscan</a>{' '}
+            <a href="https://sepolia.voyager.online" target="_blank" rel="noreferrer">Voyager</a>{' '}
             and look up your wallet address to see the full history of your commits and settlements.
           </p>
         </DocStep>

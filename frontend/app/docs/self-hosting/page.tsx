@@ -173,11 +173,11 @@ cargo run --release -p blindmarkets-solver
         A solver must have a bond deposited in the SolverBond contract before it can submit
         solutions. The minimum bond is 1 STRK. See the{' '}
         <a
-          href="https://sepolia.starkscan.co/contract/0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8"
+          href="https://sepolia.voyager.online/contract/0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8"
           target="_blank"
           rel="noreferrer"
         >
-          SolverBond contract on Starkscan
+          SolverBond contract on Voyager
         </a>{' '}
         to deposit.
       </DocCallout>
