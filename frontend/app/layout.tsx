@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { ScrollToTop } from '@/components/ScrollToTop';
 
 export const metadata: Metadata = {
   title: 'BlindMarkets',
@@ -14,6 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
+        <ScrollToTop />
         <div className="noise-overlay" />
         {children}
       </body>
