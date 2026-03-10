@@ -1,6 +1,6 @@
 # BlindMarkets
 
-Privacy-preserving Bitcoin intent execution with a frontend control console, gateway API, coordinator scheduler, and Starknet contracts.
+Privacy-preserving Bitcoin intent execution with a frontend control console, gateway API, coordinator, observer, reference solver, and Starknet contracts.
 
 ## What This Repository Contains
 
@@ -9,7 +9,9 @@ BlindMarkets is a monorepo with:
 - `frontend/`: Next.js app (App Router) for composing intents, monitoring batches, and viewing risk/analytics.
 - `backend/gateway/`: Rust API that validates, decrypts, stores, and relays intents.
 - `backend/coordinator/`: Rust scheduler for deterministic batching and auction finalization.
+- `backend/observer/`: Rust chain indexer that reconciles settlement, failure, commit, and cancel events.
 - `contracts/`: Cairo contracts for registry, auctions, settlement, and solver bonds.
+- `solver-reference/`: Reference solver that subscribes to gateway broadcasts and submits solutions/settlements.
 - `docs/`: requirements and archived implementation notes.
 
 ## Repository Layout
@@ -19,8 +21,10 @@ blindmarkets/
 ├── frontend/                # Next.js UI + API proxy routes
 ├── backend/
 │   ├── gateway/             # Rust gateway API
-│   └── coordinator/         # Rust batch scheduler
+│   ├── coordinator/         # Rust batch scheduler
+│   └── observer/            # Starknet event observer / reconciler
 ├── contracts/               # Starknet Cairo contracts + tests
+├── solver-reference/        # Reference solver node
 ├── docs/
 │   ├── requirements/prd.md
 │   └── archive/*.md
@@ -38,6 +42,7 @@ graph TD
   PG[(PostgreSQL)]
   RD[(Redis)]
   CO[Coordinator<br/>Rust Scheduler]
+  OB[Observer<br/>Rust Indexer]
   SN[Starknet RPC]
   C[(Contracts<br/>Registry / Auction / Settlement)]
   SV[Solver Network]
@@ -51,6 +56,8 @@ graph TD
   SN --> C
   CO --> GW
   CO --> SN
+  OB --> GW
+  OB --> SN
   SV --> GW
   SV --> SN
 
@@ -58,7 +65,7 @@ graph TD
   classDef svc fill:#111,stroke:#2f2f2f,stroke-width:1.5px,color:#fff;
   classDef data fill:#fff,stroke:#777,stroke-width:1px,color:#111;
   class U,FE,APIR ui;
-  class GW,CO,SV svc;
+  class GW,CO,OB,SV svc;
   class PG,RD,SN,C data;
 ```
 
@@ -67,24 +74,25 @@ graph TD
 ```mermaid
 graph TD
   A[Compose Intent] --> B[Encrypt Payload]
-  B --> C[Sign Commitment]
-  C --> D[Submit to Gateway]
+  B --> C[Sign Wallet Authorization]
+  C --> D[Submit Ciphertext to Gateway]
   D --> E[Validate + Persist]
-  E --> F[Assign Batch Window]
-  F --> G[Broadcast to Solvers]
-  G --> H[Solver Bids / Solutions]
-  H --> I[Auction Finalization]
-  I --> J[Settlement Attempt]
-  J -->|Success| K[Intent Settled]
-  J -->|Failure| L[Batch Failure + Requeue]
-  L --> F
+  E --> F[Wallet Sends commit_intent]
+  F --> G[Frontend or Observer Reconciles On-Chain Tx]
+  G --> H[Broadcast to Solvers]
+  H --> I[Solver Bids / Solutions]
+  I --> J[Auction Finalization]
+  J --> K[Settlement Attempt]
+  K -->|Success| L[Intent Settled]
+  K -->|Failure| M[Batch Failure + Requeue]
+  M --> H
 
   classDef stage fill:#0f0f0f,stroke:#00d1ff,stroke-width:1.5px,color:#f5f5f5;
   classDef ok fill:#052b1f,stroke:#19d3a2,stroke-width:1.5px,color:#d9fff2;
   classDef warn fill:#2a1a05,stroke:#ff9f1c,stroke-width:1.5px,color:#ffe8c7;
-  class A,B,C,D,E,F,G,H,I,J stage;
-  class K ok;
-  class L warn;
+  class A,B,C,D,E,F,G,H,I,J,K stage;
+  class L ok;
+  class M warn;
 ```
 
 ## Privacy Envelope (Client to Gateway)
@@ -93,12 +101,14 @@ graph TD
 graph TD
   PLAIN[Plain Intent Fields]
   NONCE[Client Nonce]
-  HASH[Commitment / Intent Hash]
-  SIG[User Signature]
+  HASH[Intent Hash]
+  SIG[Wallet Authorization]
   ECDH[ECDH Shared Secret]
   AES[AES-GCM Ciphertext]
   SUBMIT[Gateway Submit API]
-  VERIFY[Gateway Verify + Decrypt]
+  VERIFY[Gateway Verify + Store]
+  CHAIN[Wallet commit_intent Tx]
+  RECON[Observer / Frontend Reconcile]
 
   PLAIN --> HASH
   NONCE --> HASH
@@ -109,11 +119,13 @@ graph TD
   SIG --> SUBMIT
   AES --> SUBMIT
   SUBMIT --> VERIFY
+  VERIFY --> CHAIN
+  CHAIN --> RECON
 
   classDef crypto fill:#0d1220,stroke:#8f7dff,stroke-width:1.5px,color:#f2efff;
   classDef transport fill:#111,stroke:#00d1ff,stroke-width:1.5px,color:#fff;
   class PLAIN,NONCE,HASH,SIG,ECDH,AES crypto;
-  class SUBMIT,VERIFY transport;
+  class SUBMIT,VERIFY,CHAIN,RECON transport;
 ```
 
 ## Failure and Recovery Loop
@@ -166,13 +178,37 @@ Public vars used by UI:
 - `NEXT_PUBLIC_GENESIS_TIMESTAMP`
 - `NEXT_PUBLIC_*` risk/default display vars
 
-## Backend Local Stack
+## Docker Compose Stack
 
-Gateway expects local PostgreSQL and Redis.
+The repository now includes `docker-compose.yml` and per-service Dockerfiles for:
 
-- PostgreSQL: `localhost:5432`
-- Redis: `localhost:6379`
-- Gateway default local URL: `http://127.0.0.1:3000`
+- `frontend`
+- `gateway`
+- `coordinator`
+- `observer`
+- `solver`
+- `postgres`
+- `redis`
+
+Bring up the full local stack:
+
+```bash
+cp .env.compose.example .env
+docker compose build
+docker compose up -d
+```
+
+Default local URLs:
+
+- Frontend: `http://127.0.0.1:3001`
+- Gateway: `http://127.0.0.1:3000`
+- PostgreSQL: `127.0.0.1:5432`
+- Redis: `127.0.0.1:6379`
+
+Observer-specific note:
+
+- `OBSERVER_CONTRACT_ADDRESSES` must include every contract whose events you want indexed.
+- `OBSERVER_*_EVENT_KEY` values must be set to the deployed Starknet event selectors for `BatchSettled`, `BatchFailed`, `IntentCommitted`, and `IntentCanceled`.
 
 ## Vercel Deployment (Frontend)
 
