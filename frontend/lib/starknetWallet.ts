@@ -155,7 +155,7 @@ function getInjectedProvider(providerKey: WalletProviderKey): InjectedWalletProv
     throw new Error('Wallet access is only available in the browser');
   }
 
-  const provider = (window as WalletWindow)[providerKey];
+  const provider = (window as unknown as WalletWindow)[providerKey];
   if (!provider) {
     throw new Error('Wallet provider not detected in this browser');
   }
