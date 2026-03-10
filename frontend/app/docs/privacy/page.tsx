@@ -52,7 +52,7 @@ export default function PrivacyModesPage() {
               ['Asset pair', 'Hidden — encrypted payload only'],
               ['Exact amount', 'Hidden — encrypted payload only'],
               ['Minimum output', 'Hidden — encrypted payload only'],
-              ['Your wallet address', 'Visible (it's on Starknet)'],
+              ['Your wallet address', "Visible (it's on Starknet)"],
             ],
             when: 'Large orders, sensitive positions, or any situation where you don\'t want to signal intent.',
           },
