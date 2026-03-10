@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "${REPO_ROOT}"
+
 echo "🚀 Blind BTC Intent Markets - Quick Start"
 echo "=========================================="
 echo ""
@@ -14,52 +17,48 @@ if ! command -v cargo &> /dev/null; then
 fi
 
 if ! command -v psql &> /dev/null; then
-    echo "⚠️  PostgreSQL client not found. Install PostgreSQL 15+"
+    echo "⚠️  PostgreSQL client not found. Local gateway builds need PostgreSQL 15+ binaries."
 fi
 
 echo "✅ Prerequisites OK"
 echo ""
 
-# Setup database
-echo "Setting up database..."
-read -p "PostgreSQL database URL (press Enter for default): " DB_URL
-DB_URL=${DB_URL:-"postgresql://postgres:postgres@localhost:5432/blindmarkets"}
-
-# Create database if it doesn't exist
-DB_NAME=$(echo $DB_URL | sed 's/.*\///')
-if command -v psql &> /dev/null; then
-    psql -lqt | cut -d \| -f 1 | grep -qw $DB_NAME || createdb $DB_NAME 2>/dev/null || true
+# Prefer the containerized stack when Docker is available.
+if command -v docker &> /dev/null && docker compose version >/dev/null 2>&1; then
+    echo "Docker Compose detected."
+    echo "1. Copy .env.compose.example to .env and fill real values."
+    echo "2. Start the stack with: docker compose up --build"
+    echo ""
 fi
 
-# Build gateway
+# Build gateway with an ephemeral schema database so SQLx can compile cleanly.
 echo "Building Gateway API..."
-cd backend/gateway
-cargo build --release
-
-# Create .env if it doesn't exist
-if [ ! -f .env ]; then
-    cp .env.example .env
-    sed -i.bak "s|DATABASE_URL=.*|DATABASE_URL=$DB_URL|" .env
-    echo "✅ Created .env file"
-fi
-
-# Run migrations
-echo "Running database migrations..."
-export DATABASE_URL=$DB_URL
-sqlx database create 2>/dev/null || true
-sqlx migrate run 2>/dev/null || cargo run --bin migrate 2>/dev/null || true
-
+./scripts/build_gateway_with_schema.sh "$(pwd)/backend/gateway" blindmarkets-gateway
 echo "✅ Gateway ready"
 echo ""
 
 # Build coordinator
 echo "Building Batch Coordinator..."
-cd ../coordinator
+cd backend/coordinator
 cargo build --release
 echo "✅ Coordinator ready"
 echo ""
 
-cd ../..
+# Build observer
+echo "Building Observer..."
+cd ../observer
+cargo build --release
+echo "✅ Observer ready"
+echo ""
+
+# Build solver
+echo "Building Reference Solver..."
+cd ../../solver-reference
+cargo build --release
+echo "✅ Solver ready"
+echo ""
+
+cd ..
 
 echo "🎉 Setup Complete!"
 echo ""
@@ -71,10 +70,14 @@ echo ""
 echo "2. Start Coordinator (in another terminal):"
 echo "   cd backend/coordinator && cargo run --release"
 echo ""
-echo "3. Run tests:"
+echo "3. Start Observer and Solver:"
+echo "   cd backend/observer && cargo run --release"
+echo "   cd solver-reference && cargo run --release"
+echo ""
+echo "4. Or run the full stack with containers:"
+echo "   cp .env.compose.example .env && docker compose up --build"
+echo ""
+echo "5. Run tests:"
 echo "   ./scripts/test_e2e.sh"
 echo ""
-echo "4. Deploy contracts (optional):"
-echo "   ./scripts/deploy_contracts.sh"
-echo ""
-echo "📚 Documentation: See README.md and prd.md"
+echo "📚 Documentation: See README.md and docs/requirements/prd.md"
