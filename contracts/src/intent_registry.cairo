@@ -184,13 +184,16 @@ mod IntentRegistry {
             assert(!self.paused.read(), 'Contract is paused');
 
             let current_time = get_block_timestamp();
+            let caller = get_caller_address();
             assert(deadline > current_time, 'DEADLINE_PASSED');
 
             assert(!self.user_nonces.read((user, nonce)), 'NONCE_ALREADY_USED');
 
             assert(privacy_mode <= 2, 'INVALID_PRIVACY_MODE');
 
-            self._verify_signature(user, intent_hash, user_signature);
+            if caller != user {
+                self._verify_signature(user, intent_hash, user_signature);
+            }
 
             self._validate_assets(asset_in, asset_out);
 
@@ -253,13 +256,16 @@ mod IntentRegistry {
         ) -> bool {
             let intent = self.intent_by_id.read(intent_id);
             let intent_user = intent.user;
+            let caller = get_caller_address();
             
             assert(intent.status == IntentStatus::PENDING(()), 'Intent not pending');
 
             let current_time = get_block_timestamp();
             assert(current_time < intent.deadline, 'Intent expired');
 
-            self._verify_signature(intent_user, intent_id, user_signature);
+            if caller != intent_user {
+                self._verify_signature(intent_user, intent_id, user_signature);
+            }
 
             let updated_intent = Intent {
                 status: IntentStatus::CANCELED(()),

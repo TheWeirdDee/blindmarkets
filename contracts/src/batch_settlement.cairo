@@ -184,6 +184,7 @@ mod BatchSettlement {
     };
     use core::pedersen::pedersen;
     use core::array::ArrayTrait;
+    use core::traits::TryInto;
 
     #[storage]
     struct Storage {
