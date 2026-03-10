@@ -8,7 +8,7 @@ import WalletConnect from '../../components/WalletConnect';
 
 export default function DashboardPage() {
   return (
-    <main className="min-h-screen px-6 pb-16 pt-10 md:px-12 lg:px-20">
+    <div className="space-y-10">
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-text-muted">Dashboard</p>
@@ -32,6 +32,6 @@ export default function DashboardPage() {
         <RiskDisclosurePanel />
         <AuditLogView />
       </section>
-    </main>
+    </div>
   );
 }
