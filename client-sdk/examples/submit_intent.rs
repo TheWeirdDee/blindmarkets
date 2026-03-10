@@ -146,6 +146,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         user_signature: signature,
         client_public_key: encrypted_payload.client_public_key_hex,
         nonce: intent.nonce.clone(),
+        authorization_hash: None,
+        submission_mode: None,
     };
 
     match client.submit_intent(request).await {

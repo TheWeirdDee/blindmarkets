@@ -67,6 +67,8 @@ pub struct SubmitIntentRequest {
     pub user_signature: Vec<String>,
     pub client_public_key: String,
     pub nonce: String,
+    pub authorization_hash: Option<String>,
+    pub submission_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,6 +76,14 @@ pub struct SubmitIntentResponse {
     pub intent_id: String,
     pub batch_id: String,
     pub estimated_execution_time: u64,
+    pub awaiting_user_transaction: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OnchainLifecycleRequest {
+    pub action: String,
+    pub user_address: String,
+    pub tx_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

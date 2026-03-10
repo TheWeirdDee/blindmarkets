@@ -1,7 +1,7 @@
 use crate::{
     SubmitIntentRequest, SubmitIntentResponse, IntentStatusResponse,
     PendingIntentsResponse, GatewayPublicKeyResponse,
-    IntentListResponse, BatchListResponse, BatchIntentListResponse, SdkError
+    IntentListResponse, BatchListResponse, BatchIntentListResponse, OnchainLifecycleRequest, SdkError
 };
 use reqwest::{Client, header::{HeaderMap, HeaderName, HeaderValue}};
 use serde_json::json;
@@ -124,6 +124,20 @@ impl GatewayClient {
 
         let _ = self.send_with_retry(|| {
             Ok(self.client.post(&url).json(&request_body))
+        }).await?;
+
+        Ok(())
+    }
+
+    pub async fn reconcile_onchain_intent(
+        &self,
+        intent_id: &str,
+        request: OnchainLifecycleRequest,
+    ) -> Result<(), SdkError> {
+        let url = format!("{}/v1/intents/{}/onchain", self.base_url, intent_id);
+
+        let _ = self.send_with_retry(|| {
+            Ok(self.client.post(&url).json(&request))
         }).await?;
 
         Ok(())
