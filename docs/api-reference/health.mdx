@@ -1,0 +1,83 @@
+---
+title: Gateway & Health
+description: Endpoints for fetching the gateway's public key and checking service health
+---
+
+## Get gateway public key
+
+```http
+GET /v1/gateway/public_key
+```
+
+Returns the gateway's current X25519 public key. Fetch this before encrypting an intent — the key can rotate, so don't cache it long-term.
+
+No authentication required.
+
+**Response:**
+
+```json
+{
+  "gateway_public_key": "0x..."
+}
+```
+
+---
+
+## Health check
+
+```http
+GET /health
+```
+
+Returns `200 OK` if the gateway is up and its database connection is healthy. No authentication required.
+
+**Response:**
+
+```json
+{
+  "status": "ok"
+}
+```
+
+Use this endpoint for uptime monitoring. If the gateway is down or the database is unreachable, this returns `503 Service Unavailable`.
+
+---
+
+## Error format
+
+All error responses follow a consistent JSON format:
+
+```json
+{
+  "error": "intent_not_found",
+  "message": "No intent with that ID exists"
+}
+```
+
+**Common status codes:**
+
+| Code | Meaning |
+|------|---------|
+| `400` | Bad request — malformed body or invalid field |
+| `401` | Missing or invalid API key |
+| `404` | Resource not found |
+| `409` | Conflict — intent already exists with that ID |
+| `429` | Rate limited — back off and retry |
+| `500` | Gateway error — check logs |
+
+The TypeScript SDK handles `429` and `5xx` responses automatically with exponential backoff. If you're calling the API directly, implement retry logic with a minimum 200ms base delay.
+
+---
+
+## Rate limits
+
+Rate limiting is applied per API key using a Redis sliding window. The default limits are:
+
+| Endpoint | Limit |
+|----------|-------|
+| `POST /v1/intents` | 60 requests / minute |
+| `GET /v1/intents` | 300 requests / minute |
+| `GET /v1/batches` | 300 requests / minute |
+| All other endpoints | 120 requests / minute |
+
+Limits can be adjusted in the gateway configuration for self-hosted deployments.

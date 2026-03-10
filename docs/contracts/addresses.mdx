@@ -1,0 +1,62 @@
+---
+title: Deployed Addresses
+description: All six contract addresses on Starknet Sepolia testnet
+---
+
+All contracts are live on **Starknet Sepolia** testnet. Click any address to view it on Starkscan.
+
+---
+
+## Contracts
+
+| Contract | Address |
+|----------|---------|
+| **IntentRegistry** | [`0x02ba178fd7b7a44483747d1bba06ec08a61917ebf3e6489fbf118a25f2613f2b`](https://sepolia.starkscan.co/contract/0x02ba178fd7b7a44483747d1bba06ec08a61917ebf3e6489fbf118a25f2613f2b) |
+| **BatchAuction** | [`0x07e7783df0c502dc41e13fb37a5503e4e3d3d48994589d5ffddcab1c67be339c`](https://sepolia.starkscan.co/contract/0x07e7783df0c502dc41e13fb37a5503e4e3d3d48994589d5ffddcab1c67be339c) |
+| **BatchSettlement** | [`0x05d779212e1adf78803bb6051550177c0a36cbb7dfd920ec2665ed76aa9e7eb5`](https://sepolia.starkscan.co/contract/0x05d779212e1adf78803bb6051550177c0a36cbb7dfd920ec2665ed76aa9e7eb5) |
+| **SolverBond** | [`0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8`](https://sepolia.starkscan.co/contract/0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8) |
+| **AssetRegistry** | [`0x061b3c120cd166e1c523509a1ee153060b8afeab4f534c28d55d24de61bd4246`](https://sepolia.starkscan.co/contract/0x061b3c120cd166e1c523509a1ee153060b8afeab4f534c28d55d24de61bd4246) |
+| **GatewayRegistry** | [`0x0572569d692b6711f7da40d9d196bccf56b703cf8dafe03580aa713e974557b0`](https://sepolia.starkscan.co/contract/0x0572569d692b6711f7da40d9d196bccf56b703cf8dafe03580aa713e974557b0) |
+
+---
+
+## Network details
+
+| Field | Value |
+|-------|-------|
+| Network | Starknet Sepolia testnet |
+| Chain ID | `0x534e5f5345504f4c4941` |
+| RPC | `https://starknet-sepolia.drpc.org` |
+| Block explorer | [sepolia.starkscan.co](https://sepolia.starkscan.co) |
+
+---
+
+## Using the addresses
+
+### In the TypeScript SDK
+
+The SDK reads contract addresses from environment variables configured in the frontend:
+
+```bash
+NEXT_PUBLIC_INTENT_REGISTRY_ADDRESS=0x02ba178fd7b7a44483747d1bba06ec08a61917ebf3e6489fbf118a25f2613f2b
+NEXT_PUBLIC_BATCH_AUCTION_ADDRESS=0x07e7783df0c502dc41e13fb37a5503e4e3d3d48994589d5ffddcab1c67be339c
+NEXT_PUBLIC_BATCH_SETTLEMENT_ADDRESS=0x05d779212e1adf78803bb6051550177c0a36cbb7dfd920ec2665ed76aa9e7eb5
+NEXT_PUBLIC_SOLVER_BOND_ADDRESS=0x069db55d725a0a4f48705ebecf0993e455e2b3716940081005b48d779e7301e8
+NEXT_PUBLIC_ASSET_REGISTRY_ADDRESS=0x061b3c120cd166e1c523509a1ee153060b8afeab4f534c28d55d24de61bd4246
+NEXT_PUBLIC_GATEWAY_REGISTRY_ADDRESS=0x0572569d692b6711f7da40d9d196bccf56b703cf8dafe03580aa713e974557b0
+```
+
+### In Starknet calls
+
+Use these addresses directly in `sncast` or `starknet.js` calls. All contracts follow the standard Cairo Starknet ABI — functions are callable via any Starknet SDK.
+
+### Verifying a contract
+
+To verify that a contract at an address matches the published source:
+
+```bash
+sncast verify \
+  --network sepolia \
+  --contract-address 0x02ba178fd7b7a44483747d1bba06ec08a61917ebf3e6489fbf118a25f2613f2b \
+  --contract-name IntentRegistry
+```

@@ -1,0 +1,66 @@
+---
+title: Contracts Overview
+description: How the six BlindMarkets contracts are wired together and what each one does
+---
+
+## The six contracts
+
+BlindMarkets is built on six Cairo contracts deployed on Starknet Sepolia. Each has a specific role in the lifecycle of an order.
+
+<CardGroup cols={2}>
+  <Card title="IntentRegistry" icon="clipboard">
+    Stores on-chain commitment hashes. Your wallet talks to this contract when you place an order. The coordinator uses it to open and close batch windows.
+  </Card>
+  <Card title="BatchAuction" icon="gavel">
+    Runs the solver auction. Receives proposed solutions, scores them, and declares a winner for each batch.
+  </Card>
+  <Card title="BatchSettlement" icon="check-circle">
+    Executes the winning solution. Transfers tokens atomically. Verifies each fill against the on-chain commitment hash.
+  </Card>
+  <Card title="SolverBond" icon="coins">
+    Manages solver collateral. Solvers deposit STRK here. Bad behaviour (failing to settle after winning) is slashed from this balance.
+  </Card>
+  <Card title="AssetRegistry" icon="list">
+    Whitelist of tokens that can be traded. A token must be registered here before it can appear in any order.
+  </Card>
+  <Card title="GatewayRegistry" icon="server">
+    Registry of authorised gateway operators. A gateway must be registered here before it can relay intents.
+  </Card>
+</CardGroup>
+
+---
+
+## How they interact
+
+| Caller | Contract | When |
+|--------|----------|------|
+| User wallet | IntentRegistry | When placing an order |
+| Coordinator | IntentRegistry | To open and close batch windows |
+| Solver | BatchAuction | To submit a solution |
+| BatchAuction | BatchSettlement | When declaring an auction winner |
+| BatchSettlement | SolverBond | To slash a solver that fails to settle |
+| Solver | SolverBond | To deposit or withdraw their bond |
+
+---
+
+## Source code
+
+All contracts are written in Cairo and live in `contracts/src/` in the monorepo. They're open source under the MIT licence.
+
+The key files:
+- `contracts/src/intent_registry.cairo`
+- `contracts/src/batch_auction.cairo`
+- `contracts/src/batch_settlement.cairo`
+- `contracts/src/solver_bond.cairo`
+- `contracts/src/asset_registry.cairo`
+- `contracts/src/gateway_registry.cairo`
+
+---
+
+## Security model
+
+**No custody of funds.** The contracts never hold trader funds in escrow. Token transfers happen directly from the trader's wallet to the recipient in the settlement transaction. The solver's proposed solution must transfer the correct amounts or the entire transaction reverts.
+
+**Commitment-based privacy.** The on-chain record is a Pedersen hash of the order, not the order itself. The actual amounts are revealed only at settlement, verified by the hash.
+
+**Economic security.** Solvers post a bond before participating. If they win an auction and fail to settle, they lose a portion of that bond. This makes griefing attacks (winning without settling) financially unprofitable.

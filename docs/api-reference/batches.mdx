@@ -1,0 +1,106 @@
+---
+title: Batches
+description: REST API endpoints for listing and inspecting batch windows
+---
+
+All endpoints require the `X-API-KEY` header.
+
+---
+
+## List batches
+
+```http
+GET /v1/batches
+```
+
+Returns a paginated list of batch windows.
+
+**Query parameters:**
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `status` | string | `open \| auction \| settled \| failed` |
+| `limit` | number | Max results per page. Default `20`, max `100` |
+| `offset` | number | Pagination offset |
+
+**Response:**
+
+```json
+{
+  "batches": [
+    {
+      "batch_id": "0x...",
+      "close_time": 1700000030,
+      "intent_count": 4,
+      "auction_deadline": 1700000050,
+      "status": "settled",
+      "created_at": "2024-01-01T00:00:00Z",
+      "settled_at": "2024-01-01T00:00:55Z",
+      "failure_reason": null,
+      "failed_at": null
+    }
+  ],
+  "total": 100,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+---
+
+## Get a single batch
+
+```http
+GET /v1/batches/:batchId
+```
+
+Returns details for a specific batch.
+
+**Response:**
+
+```json
+{
+  "batch_id": "0x...",
+  "close_time": 1700000030,
+  "intent_count": 4,
+  "auction_deadline": 1700000050,
+  "status": "settled",
+  "created_at": "2024-01-01T00:00:00Z",
+  "settled_at": "2024-01-01T00:00:55Z",
+  "failure_reason": null,
+  "failed_at": null
+}
+```
+
+**Batch status values:**
+
+| Status | Description |
+|--------|-------------|
+| `open` | Batch window is currently accepting orders |
+| `auction` | Window closed — solvers are submitting solutions |
+| `settled` | Winning solution has been executed on-chain |
+| `failed` | No valid solution was submitted before the deadline |
+
+---
+
+## List intents in a batch
+
+```http
+GET /v1/batches/:batchId/intents
+```
+
+Returns all intent IDs belonging to a specific batch.
+
+**Response:**
+
+```json
+{
+  "batch_id": "0x...",
+  "intent_ids": [
+    "0x...",
+    "0x..."
+  ]
+}
+```
+
+Use this to fetch individual intent details with `GET /v1/intents/:intentId` for each entry.
