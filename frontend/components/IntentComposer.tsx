@@ -5,21 +5,32 @@ import { motion } from 'framer-motion';
 import clsx from 'clsx';
 import { useIntentStore } from '../state/useIntentStore';
 import { buildIntent, encryptIntentForGateway, generateNonce } from '../lib/intentCrypto';
+import {
+  buildCancelIntentCall,
+  buildCommitIntentCall,
+  connectWallet,
+  restoreWalletSession,
+  signIntentAuthorization,
+  truncateAddress,
+} from '../lib/starknetWallet';
 
 const privacyOptions = [
-  { id: 'public', label: 'Public', icon: '🔓', color: 'text-text-muted' },
-  { id: 'hidden-amount', label: 'Hidden Amount', icon: '🔒', color: 'text-accent-warning' },
-  { id: 'hidden-direction', label: 'Hidden Direction', icon: '🔐', color: 'text-accent-success' }
+  { id: 'public', label: 'Public', icon: '🔓', color: 'text-text-muted', description: 'Pair, size, and direction visible to solvers from submission.' },
+  { id: 'hidden-amount', label: 'Hidden Amount', icon: '🔒', color: 'text-accent-warning', description: 'Pair visible, order size hidden until the batch closes.' },
+  { id: 'hidden-direction', label: 'Hidden Direction', icon: '🔐', color: 'text-accent-success', description: 'Size and direction both hidden. Solver sees neither until execution.' },
 ] as const;
 
 export default function IntentComposer() {
-  const { draft, setDraft, walletAddress } = useIntentStore();
+  const {
+    draft,
+    setDraft,
+    walletAddress,
+    walletProviderKey,
+    setWalletSession,
+  } = useIntentStore();
   const [minOutput, setMinOutput] = useState(Number(draft.minOutput) || 0);
   const [maxFee, setMaxFee] = useState(draft.maxFeeBps ? draft.maxFeeBps / 100 : 0);
   const [privacy, setPrivacy] = useState(draft.privacyMode);
-  const [userAddress, setUserAddress] = useState(walletAddress);
-  const [signatureR, setSignatureR] = useState('');
-  const [signatureS, setSignatureS] = useState('');
   const [intentHash, setIntentHash] = useState('');
   const [intentId, setIntentId] = useState('');
   const [preparedNonce, setPreparedNonce] = useState('');
@@ -32,34 +43,46 @@ export default function IntentComposer() {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
-    if (walletAddress && walletAddress !== userAddress) {
-      setUserAddress(walletAddress);
-    }
-  }, [walletAddress, userAddress]);
-
-  useEffect(() => {
     setPreparedNonce('');
     setIntentHash('');
     setIntentId('');
-  }, [draft.assetIn, draft.assetOut, draft.amount, draft.minOutput, draft.deadlineMinutes, privacy, userAddress]);
+  }, [
+    draft.assetIn,
+    draft.assetOut,
+    draft.amount,
+    draft.minOutput,
+    draft.deadlineMinutes,
+    draft.maxFeeBps,
+    privacy,
+    walletAddress,
+  ]);
 
   const prepareIntent = () => {
     setStatusMessage(null);
-    if (!userAddress || !draft.assetIn || !draft.assetOut || !draft.amount || !draft.minOutput || !draft.deadlineMinutes) {
+    if (!walletAddress) {
+      setStatusMessage('Connect a Starknet wallet before preparing an intent.');
+      return;
+    }
+    if (!draft.assetIn || !draft.assetOut || !draft.amount || !draft.minOutput || !draft.deadlineMinutes) {
       setStatusMessage('Complete all intent fields before preparing.');
       return;
     }
-    if (!isHex(userAddress) || !isHex(draft.assetIn) || !isHex(draft.assetOut)) {
+    if (!isHex(walletAddress) || !isHex(draft.assetIn) || !isHex(draft.assetOut)) {
       setStatusMessage('Addresses must be hex values starting with 0x.');
       return;
     }
+    if (isZeroAddress(draft.assetIn) || isZeroAddress(draft.assetOut)) {
+      setStatusMessage('Asset addresses cannot be the zero address. Enter the deployed token contract addresses.');
+      return;
+    }
+
     try {
       const amount = parseBigint(draft.amount);
       const minOut = parseBigint(draft.minOutput);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + draft.deadlineMinutes * 60);
       const nonce = generateNonce();
       const intent = buildIntent({
-        userAddress,
+        userAddress: walletAddress,
         assetIn: draft.assetIn,
         assetOut: draft.assetOut,
         amount,
@@ -67,12 +90,13 @@ export default function IntentComposer() {
         maxFeeBps: draft.maxFeeBps,
         deadline,
         privacyMode: privacy,
-        nonce
+        nonce,
       });
       setPreparedNonce(nonce);
       setIntentHash(intent.intentHash);
       setIntentId(intent.intentId);
-      setStatusMessage('Intent hash prepared. Sign and submit.');
+      setStatusIntentId(intent.intentId);
+      setStatusMessage('Intent prepared. Submit to store ciphertext, then approve the wallet transaction.');
     } catch (error) {
       setStatusMessage(`Preparation failed: ${String(error)}`);
     }
@@ -80,57 +104,41 @@ export default function IntentComposer() {
 
   const onSubmit = async () => {
     setStatusMessage(null);
-    if (!userAddress || !signatureR || !signatureS) {
-      setStatusMessage('User address and signature are required.');
+    if (!walletProviderKey || !walletAddress) {
+      setStatusMessage('Connect a Starknet wallet before submitting.');
       return;
     }
     if (!draft.assetIn || !draft.assetOut || !draft.amount || !draft.minOutput || !draft.deadlineMinutes) {
       setStatusMessage('Complete all intent fields before submitting.');
       return;
     }
-    if (!isHex(userAddress) || !isHex(draft.assetIn) || !isHex(draft.assetOut)) {
-      setStatusMessage('Addresses must be hex values starting with 0x.');
-      return;
-    }
-    if (!isHex(signatureR) || !isHex(signatureS)) {
-      setStatusMessage('Signature values must be hex.');
-      return;
-    }
     if (!preparedNonce) {
-      setStatusMessage('Prepare intent to generate hash before submitting.');
+      setStatusMessage('Prepare the intent before submitting.');
       return;
     }
-
-    const amount = parseBigint(draft.amount);
-    const minOut = parseBigint(draft.minOutput);
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + draft.deadlineMinutes * 60);
 
     try {
       setIsSubmitting(true);
-      const intent = buildIntent({
-        userAddress,
-        assetIn: draft.assetIn,
-        assetOut: draft.assetOut,
-        amount,
-        minOutput: minOut,
-        maxFeeBps: draft.maxFeeBps,
-        deadline,
-        privacyMode: privacy,
-        nonce: preparedNonce
-      });
+      const session = await resolveWalletSession(walletProviderKey, setWalletSession);
+      if (normalizeHex(session.address) !== normalizeHex(walletAddress)) {
+        throw new Error('Connected wallet changed. Re-prepare the intent and try again.');
+      }
+
+      const intent = buildPreparedIntent(walletAddress, draft, privacy, preparedNonce);
       setIntentHash(intent.intentHash);
       setIntentId(intent.intentId);
+      setStatusIntentId(intent.intentId);
 
       const gatewayPublicKeyResponse = await fetch('/api/gateway/public-key');
       if (!gatewayPublicKeyResponse.ok) {
-        setStatusMessage('Failed to fetch gateway public key.');
-        return;
+        throw new Error(await extractGatewayError(gatewayPublicKeyResponse));
       }
       const gatewayPublicKey = (await gatewayPublicKeyResponse.json()).gateway_public_key as string;
 
       const encrypted = await encryptIntentForGateway(intent, gatewayPublicKey);
+      const authorization = await signIntentAuthorization(session.account, intent);
 
-      const response = await fetch('/api/gateway/intents', {
+      const storageResponse = await fetch('/api/gateway/intents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -139,19 +147,39 @@ export default function IntentComposer() {
           ciphertext: encrypted.ciphertextHex,
           encrypted_session_key: encrypted.encryptedSessionKeyHex,
           commitment: intent.intentHash,
-          user_signature: [signatureR, signatureS],
+          user_signature: authorization.signature,
           client_public_key: encrypted.clientPublicKeyHex,
-          nonce: intent.nonce
-        })
+          nonce: intent.nonce,
+          authorization_hash: authorization.authorizationHash,
+          submission_mode: 'SELF_COMMIT',
+        }),
       });
 
-      if (!response.ok) {
-        const error = await response.text();
-        setStatusMessage(`Submission failed: ${error}`);
+      if (!storageResponse.ok) {
+        throw new Error(await extractGatewayError(storageResponse));
+      }
+
+      const transaction = await session.account.execute([buildCommitIntentCall(intent)]);
+      const txHash = normalizeHex(transaction.transaction_hash);
+
+      const reconcileResponse = await fetch(`/api/gateway/intents/${intent.intentId}/onchain`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'COMMITTED',
+          user_address: intent.userAddress,
+          tx_hash: txHash,
+        }),
+      });
+
+      if (!reconcileResponse.ok) {
+        setStatusMessage(
+          `Intent committed on-chain. Gateway reconciliation is pending via the observer. Tx ${truncateAddress(txHash)}`
+        );
         return;
       }
-      setStatusMessage('Intent submitted successfully.');
-      setStatusIntentId(intent.intentId);
+
+      setStatusMessage(`Intent submitted and committed on-chain. Tx ${truncateAddress(txHash)}`);
     } catch (error) {
       setStatusMessage(`Submission failed: ${String(error)}`);
     } finally {
@@ -169,8 +197,7 @@ export default function IntentComposer() {
       setIsCheckingStatus(true);
       const response = await fetch(`/api/gateway/intents/${statusIntentId}`);
       if (!response.ok) {
-        const body = await response.text();
-        setStatusResult(`Status query failed: ${body}`);
+        setStatusResult(`Status query failed: ${await extractGatewayError(response)}`);
         return;
       }
       const payload = await response.json();
@@ -184,30 +211,38 @@ export default function IntentComposer() {
 
   const cancelIntent = async () => {
     setStatusResult(null);
+    if (!walletProviderKey || !walletAddress) {
+      setStatusResult('Connect a wallet before canceling.');
+      return;
+    }
     if (!statusIntentId || !isHex(statusIntentId)) {
       setStatusResult('Provide a valid intent ID.');
       return;
     }
-    if (!userAddress || !signatureR || !signatureS) {
-      setStatusResult('User address and signature are required to cancel.');
-      return;
-    }
+
     try {
       setIsCanceling(true);
-      const response = await fetch(`/api/gateway/intents/${statusIntentId}`, {
+      const session = await resolveWalletSession(walletProviderKey, setWalletSession);
+      const transaction = await session.account.execute([buildCancelIntentCall(statusIntentId)]);
+      const txHash = normalizeHex(transaction.transaction_hash);
+
+      const response = await fetch(`/api/gateway/intents/${statusIntentId}/onchain`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_address: userAddress,
-          signature: [signatureR, signatureS]
-        })
+          action: 'CANCELED',
+          user_address: session.address,
+          tx_hash: txHash,
+        }),
       });
       if (!response.ok) {
-        const body = await response.text();
-        setStatusResult(`Cancel failed: ${body}`);
+        setStatusResult(
+          `Cancel committed on-chain. Gateway reconciliation is pending via the observer. Tx ${truncateAddress(txHash)}`
+        );
         return;
       }
-      setStatusResult('Intent canceled.');
+
+      setStatusResult(`Intent canceled on-chain. Tx ${truncateAddress(txHash)}`);
     } catch (error) {
       setStatusResult(`Cancel failed: ${String(error)}`);
     } finally {
@@ -223,19 +258,19 @@ export default function IntentComposer() {
       className="glass-card glass-card-hover gradient-border relative overflow-hidden"
     >
       <div className="relative z-10 p-6 md:p-8">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-text-muted">Intent Composer</p>
-            <h2 className="text-2xl md:text-3xl font-semibold">Execute with Privacy</h2>
+            <h2 className="text-2xl font-semibold md:text-3xl">Execute with Privacy</h2>
           </div>
-          <div className="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-sm">
-            Privacy 🔒
+          <div className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm">
+            {walletAddress ? `Wallet ${truncateAddress(walletAddress)}` : 'Connect Wallet'}
           </div>
         </div>
 
         <div className="mt-6 grid gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-4">
+            <div className="flex-1 rounded-xl border border-white/10 bg-white/5 p-4">
               <p className="text-xs text-text-muted">From</p>
               <div className="mt-2 flex items-center justify-between">
                 <input
@@ -254,7 +289,7 @@ export default function IntentComposer() {
               </div>
             </div>
             <div className="text-2xl text-text-muted">→</div>
-            <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-4">
+            <div className="flex-1 rounded-xl border border-white/10 bg-white/5 p-4">
               <p className="text-xs text-text-muted">To</p>
               <div className="mt-2 flex items-center justify-between">
                 <input
@@ -263,19 +298,12 @@ export default function IntentComposer() {
                   placeholder="0x..."
                   className="w-full bg-transparent text-sm font-semibold outline-none"
                 />
-                <button
-                  type="button"
-                  onClick={() => setDraft({ assetIn: draft.assetOut, assetOut: draft.assetIn })}
-                  className="text-xs text-text-secondary"
-                >
-                  Switch
-                </button>
               </div>
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
               <p className="text-xs text-text-muted">Amount (base units)</p>
               <div className="mt-2 flex items-end justify-between gap-3">
                 <input
@@ -287,9 +315,9 @@ export default function IntentComposer() {
                 />
                 <span className="text-xs text-text-secondary">{draft.assetIn || '—'}</span>
               </div>
-              <p className="mt-1 text-xs text-text-muted">Balance: —</p>
+              <p className="mt-1 text-xs text-text-muted">Authorization comes from the connected wallet.</p>
             </div>
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
               <p className="text-xs text-text-muted">Deadline</p>
               <div className="mt-2 flex items-end justify-between gap-3">
                 <input
@@ -303,54 +331,36 @@ export default function IntentComposer() {
                 />
                 <span className="text-xs text-text-secondary">minutes</span>
               </div>
-              <p className="mt-1 text-xs text-text-muted">Batch window aligned</p>
+              <p className="mt-1 text-xs text-text-muted">Stored at gateway, committed with your wallet.</p>
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="bg-white/5 border border-white/10 rounded-xl p-4">
-              <span className="text-xs text-text-muted">User Address</span>
-              <input
-                value={userAddress}
-                onChange={(event) => setUserAddress(event.target.value)}
-                placeholder="0x..."
-                className="mt-2 w-full bg-transparent text-sm outline-none"
-              />
-            </label>
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-              <p className="text-xs text-text-muted">Signature</p>
-              <div className="mt-2 grid gap-2">
-                <input
-                  value={signatureR}
-                  onChange={(event) => setSignatureR(event.target.value)}
-                  placeholder="r (0x...)"
-                  className="w-full bg-transparent text-xs outline-none"
-                />
-                <input
-                  value={signatureS}
-                  onChange={(event) => setSignatureS(event.target.value)}
-                  placeholder="s (0x...)"
-                  className="w-full bg-transparent text-xs outline-none"
-                />
-              </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs text-text-muted">Connected Wallet</p>
+              <p className="mt-2 break-all text-sm text-text-secondary">{walletAddress || 'No Starknet wallet connected'}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs text-text-muted">Submission Mode</p>
+              <p className="mt-2 text-sm text-text-secondary">Gateway stores encrypted payload, wallet sends the on-chain commit.</p>
             </div>
           </div>
 
-          {(intentHash || intentId) && (
+          {(intentHash || intentId) ? (
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs text-text-muted">Intent Hash</p>
                 <p className="mt-2 break-all text-xs text-text-secondary">{intentHash || '—'}</p>
               </div>
-              <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs text-text-muted">Intent ID</p>
                 <p className="mt-2 break-all text-xs text-text-secondary">{intentId || '—'}</p>
               </div>
             </div>
-          )}
+          ) : null}
 
           <div className="grid gap-3 md:grid-cols-2">
-            <label className="bg-white/5 border border-white/10 rounded-xl p-4">
+            <label className="rounded-xl border border-white/10 bg-white/5 p-4">
               <span className="text-xs text-text-muted">Intent ID (status/cancel)</span>
               <input
                 value={statusIntentId}
@@ -359,10 +369,11 @@ export default function IntentComposer() {
                 className="mt-2 w-full bg-transparent text-sm outline-none"
               />
             </label>
-            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4">
               <p className="text-xs text-text-muted">Status Actions</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <button
+                  type="button"
                   onClick={checkStatus}
                   disabled={isCheckingStatus}
                   className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-text-secondary disabled:opacity-50"
@@ -370,23 +381,23 @@ export default function IntentComposer() {
                   {isCheckingStatus ? 'Checking…' : 'Check Status'}
                 </button>
                 <button
+                  type="button"
                   onClick={cancelIntent}
                   disabled={isCanceling}
                   className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-text-secondary disabled:opacity-50"
                 >
-                  {isCanceling ? 'Canceling…' : 'Cancel Intent'}
+                  {isCanceling ? 'Canceling…' : 'Cancel On-Chain'}
                 </button>
               </div>
-              {statusResult && (
-                <p className="mt-2 text-xs text-text-muted">{statusResult}</p>
-              )}
+              {statusResult ? <p className="mt-2 text-xs text-text-muted">{statusResult}</p> : null}
             </div>
           </div>
 
-          <div className="bg-white/3 border border-white/10 rounded-2xl p-5">
+          <div className="rounded-2xl border border-white/10 bg-white/3 p-5">
             <div className="flex items-center justify-between">
               <p className="text-sm text-text-secondary">Constraints</p>
               <button
+                type="button"
                 onClick={() => setShowAdvanced((prev) => !prev)}
                 className="text-xs text-text-muted"
               >
@@ -394,7 +405,7 @@ export default function IntentComposer() {
               </button>
             </div>
 
-            {showAdvanced && (
+            {showAdvanced ? (
               <div className="mt-4 space-y-4">
                 <div>
                   <div className="flex items-center justify-between text-xs text-text-muted">
@@ -434,7 +445,7 @@ export default function IntentComposer() {
                   />
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
 
           <div className="space-y-2">
@@ -443,22 +454,21 @@ export default function IntentComposer() {
               {privacyOptions.map((option) => (
                 <button
                   key={option.id}
+                  type="button"
                   onClick={() => {
                     setPrivacy(option.id);
                     setDraft({ privacyMode: option.id as typeof draft.privacyMode });
                   }}
                   className={clsx(
                     'rounded-xl border px-3 py-3 text-left transition',
-                    privacy === option.id
-                      ? 'border-white/30 bg-white/10'
-                      : 'border-white/10 bg-white/5'
+                    privacy === option.id ? 'border-white/30 bg-white/10' : 'border-white/10 bg-white/5'
                   )}
                 >
                   <div className="flex items-center gap-2">
                     <span className={clsx('text-lg', option.color)}>{option.icon}</span>
                     <div>
                       <p className="text-sm font-medium">{option.label}</p>
-                      <p className="text-xs text-text-muted">Institutional routing</p>
+                      <p className="text-xs text-text-muted">{option.description}</p>
                     </div>
                   </div>
                 </button>
@@ -469,38 +479,86 @@ export default function IntentComposer() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs text-text-muted">Estimated Execution</p>
-              <p className="text-sm">—</p>
+              <p className="text-sm">Wallet signature + on-chain commit + batch assignment</p>
             </div>
             <div>
               <p className="text-xs text-text-muted">Total Cost</p>
-              <p className="text-sm">—</p>
+              <p className="text-sm">Wallet gas + solver fee ceiling {maxFee.toFixed(2)}%</p>
             </div>
             <div className="flex flex-col gap-2">
               <button
+                type="button"
                 onClick={prepareIntent}
                 className="rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-sm font-semibold text-text-secondary"
               >
-                Prepare Hash
+                Prepare Intent
               </button>
               <button
+                type="button"
                 onClick={onSubmit}
                 disabled={isSubmitting}
-                className="rounded-xl bg-accent-primary px-6 py-3 text-sm font-semibold text-white shadow-glass disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl bg-accent-primary px-6 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isSubmitting ? 'Submitting…' : 'Submit Intent'}
+                {isSubmitting ? 'Submitting…' : 'Submit With Wallet'}
               </button>
             </div>
           </div>
 
-          {statusMessage && (
+          {statusMessage ? (
             <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-text-secondary">
               {statusMessage}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </motion.section>
   );
+}
+
+async function resolveWalletSession(
+  providerKey: NonNullable<ReturnType<typeof useIntentStore.getState>['walletProviderKey']>,
+  setWalletSession: ReturnType<typeof useIntentStore.getState>['setWalletSession']
+) {
+  const restored = await restoreWalletSession(providerKey);
+  const session = restored ?? await connectWallet(providerKey);
+  setWalletSession(session.address, session.providerKey);
+  return session;
+}
+
+function buildPreparedIntent(
+  walletAddress: string,
+  draft: ReturnType<typeof useIntentStore.getState>['draft'],
+  privacy: ReturnType<typeof useIntentStore.getState>['draft']['privacyMode'],
+  nonce: string
+) {
+  const amount = parseBigint(draft.amount);
+  const minOut = parseBigint(draft.minOutput);
+  const deadline = BigInt(Math.floor(Date.now() / 1000) + draft.deadlineMinutes * 60);
+  return buildIntent({
+    userAddress: walletAddress,
+    assetIn: draft.assetIn,
+    assetOut: draft.assetOut,
+    amount,
+    minOutput: minOut,
+    maxFeeBps: draft.maxFeeBps,
+    deadline,
+    privacyMode: privacy,
+    nonce,
+  });
+}
+
+async function extractGatewayError(response: Response): Promise<string> {
+  const body = await response.text();
+  if (!body) {
+    return `HTTP ${response.status}`;
+  }
+
+  try {
+    const parsed = JSON.parse(body) as { error?: string };
+    return parsed.error ?? body;
+  } catch {
+    return body;
+  }
 }
 
 function parseBigint(value: string): bigint {
@@ -514,4 +572,13 @@ function parseBigint(value: string): bigint {
 function isHex(value: string): boolean {
   const normalized = value.startsWith('0x') ? value.slice(2) : value;
   return normalized.length > 0 && /^[0-9a-fA-F]+$/.test(normalized);
+}
+
+function isZeroAddress(value: string): boolean {
+  const normalized = value.startsWith('0x') ? value.slice(2) : value;
+  return normalized.length === 0 || /^0+$/.test(normalized);
+}
+
+function normalizeHex(value: string): string {
+  return value.startsWith('0x') ? value.toLowerCase() : `0x${value.toLowerCase()}`;
 }
