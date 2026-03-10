@@ -85,7 +85,8 @@ impl ObserverIndexer {
 
     async fn poll_events(&mut self) -> Result<()> {
         let mut max_seen_block = self.current_block;
-        for address in &self.config.contract_addresses {
+        let addresses = self.config.contract_addresses.clone();
+        for address in &addresses {
             let mut continuation: Option<String> = None;
             loop {
                 let response = self.fetch_events(address, continuation.clone()).await?;
