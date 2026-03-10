@@ -47,7 +47,7 @@ export default function SelfHostingPage() {
 
       <h2>1. Clone and configure</h2>
       <DocCode language="bash">{`
-git clone https://github.com/winszns/blindmarkets
+git clone https://github.com/winsznx/blindmarkets
 cd blindmarkets
 cp .env.compose.example .env
       `}</DocCode>

@@ -223,7 +223,7 @@ try {
 
       <DocCode filename="Cargo.toml" language="toml">{`
 [dependencies]
-blindmarkets-sdk = { git = "https://github.com/winszns/blindmarkets", subdirectory = "client-sdk" }
+blindmarkets-sdk = { git = "https://github.com/winsznx/blindmarkets", subdirectory = "client-sdk" }
       `}</DocCode>
 
       <div className="not-prose mt-8">
