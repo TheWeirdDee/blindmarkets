@@ -15,6 +15,12 @@ pub struct ObserverConfig {
     pub failure_event_key: String,
     pub failure_batch_id_index: usize,
     pub failure_reason_index: usize,
+    pub intent_commit_event_key: String,
+    pub intent_commit_intent_id_index: usize,
+    pub intent_commit_user_index: usize,
+    pub intent_cancel_event_key: String,
+    pub intent_cancel_intent_id_index: usize,
+    pub intent_cancel_user_index: usize,
     pub checkpoint_path: String,
 }
 
@@ -62,6 +68,26 @@ impl ObserverConfig {
             .map_err(|_| "OBSERVER_FAILURE_REASON_INDEX environment variable not set".to_string())?
             .parse()
             .map_err(|e| format!("Invalid OBSERVER_FAILURE_REASON_INDEX: {}", e))?;
+        let intent_commit_event_key = env::var("OBSERVER_INTENT_COMMIT_EVENT_KEY")
+            .map_err(|_| "OBSERVER_INTENT_COMMIT_EVENT_KEY environment variable not set".to_string())?;
+        let intent_commit_intent_id_index = env::var("OBSERVER_INTENT_COMMIT_INTENT_ID_INDEX")
+            .map_err(|_| "OBSERVER_INTENT_COMMIT_INTENT_ID_INDEX environment variable not set".to_string())?
+            .parse()
+            .map_err(|e| format!("Invalid OBSERVER_INTENT_COMMIT_INTENT_ID_INDEX: {}", e))?;
+        let intent_commit_user_index = env::var("OBSERVER_INTENT_COMMIT_USER_INDEX")
+            .map_err(|_| "OBSERVER_INTENT_COMMIT_USER_INDEX environment variable not set".to_string())?
+            .parse()
+            .map_err(|e| format!("Invalid OBSERVER_INTENT_COMMIT_USER_INDEX: {}", e))?;
+        let intent_cancel_event_key = env::var("OBSERVER_INTENT_CANCEL_EVENT_KEY")
+            .map_err(|_| "OBSERVER_INTENT_CANCEL_EVENT_KEY environment variable not set".to_string())?;
+        let intent_cancel_intent_id_index = env::var("OBSERVER_INTENT_CANCEL_INTENT_ID_INDEX")
+            .map_err(|_| "OBSERVER_INTENT_CANCEL_INTENT_ID_INDEX environment variable not set".to_string())?
+            .parse()
+            .map_err(|e| format!("Invalid OBSERVER_INTENT_CANCEL_INTENT_ID_INDEX: {}", e))?;
+        let intent_cancel_user_index = env::var("OBSERVER_INTENT_CANCEL_USER_INDEX")
+            .map_err(|_| "OBSERVER_INTENT_CANCEL_USER_INDEX environment variable not set".to_string())?
+            .parse()
+            .map_err(|e| format!("Invalid OBSERVER_INTENT_CANCEL_USER_INDEX: {}", e))?;
         let checkpoint_path = env::var("OBSERVER_CHECKPOINT_PATH")
             .map_err(|_| "OBSERVER_CHECKPOINT_PATH environment variable not set".to_string())?;
 
@@ -78,6 +104,12 @@ impl ObserverConfig {
             failure_event_key,
             failure_batch_id_index,
             failure_reason_index,
+            intent_commit_event_key,
+            intent_commit_intent_id_index,
+            intent_commit_user_index,
+            intent_cancel_event_key,
+            intent_cancel_intent_id_index,
+            intent_cancel_user_index,
             checkpoint_path,
         })
     }
@@ -118,6 +150,12 @@ impl ObserverConfig {
         }
         if !self.failure_event_key.starts_with("0x") {
             return Err("OBSERVER_FAILURE_EVENT_KEY must start with 0x".to_string());
+        }
+        if !self.intent_commit_event_key.starts_with("0x") {
+            return Err("OBSERVER_INTENT_COMMIT_EVENT_KEY must start with 0x".to_string());
+        }
+        if !self.intent_cancel_event_key.starts_with("0x") {
+            return Err("OBSERVER_INTENT_CANCEL_EVENT_KEY must start with 0x".to_string());
         }
 
         if self.checkpoint_path.trim().is_empty() {

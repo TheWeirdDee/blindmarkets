@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::config::ObserverConfig;
 
@@ -73,7 +73,9 @@ impl ObserverIndexer {
 
     pub async fn run(&mut self) -> Result<()> {
         loop {
-            self.poll_events().await?;
+            if let Err(e) = self.poll_events().await {
+                error!("Observer poll error (will retry): {}", e);
+            }
             tokio::time::sleep(std::time::Duration::from_secs(
                 self.config.poll_interval_seconds
             ))
@@ -172,6 +174,16 @@ impl ObserverIndexer {
                 warn!("Failed to handle failure event: {}", e);
             }
         }
+        if self.is_intent_commit_event(&event) {
+            if let Err(e) = self.handle_intent_commit_event(&event).await {
+                warn!("Failed to handle intent commit event: {}", e);
+            }
+        }
+        if self.is_intent_cancel_event(&event) {
+            if let Err(e) = self.handle_intent_cancel_event(&event).await {
+                warn!("Failed to handle intent cancel event: {}", e);
+            }
+        }
 
         Ok(())
     }
@@ -184,6 +196,20 @@ impl ObserverIndexer {
         event.keys.iter().any(|key| key.eq_ignore_ascii_case(&self.config.failure_event_key))
     }
 
+    fn is_intent_commit_event(&self, event: &RawEvent) -> bool {
+        event
+            .keys
+            .iter()
+            .any(|key| key.eq_ignore_ascii_case(&self.config.intent_commit_event_key))
+    }
+
+    fn is_intent_cancel_event(&self, event: &RawEvent) -> bool {
+        event
+            .keys
+            .iter()
+            .any(|key| key.eq_ignore_ascii_case(&self.config.intent_cancel_event_key))
+    }
+
     async fn handle_settlement_event(&self, event: &RawEvent) -> Result<()> {
         let index = self.config.settlement_batch_id_index;
         if event.data.len() <= index {
@@ -192,31 +218,15 @@ impl ObserverIndexer {
 
         let batch_id = parse_hex_u128(&event.data[index])?.to_string();
         let settled_at = chrono::Utc::now().timestamp();
-
-        let mut attempts: u32 = 0;
-        loop {
-            attempts += 1;
-            let response = self.client
-                .post(format!("{}/v1/batches/settled", self.config.gateway_url))
-                .header(self.config.gateway_api_key_header.as_str(), self.config.gateway_api_key.as_str())
-                .json(&serde_json::json!({
-                    "batch_id": batch_id,
-                    "settled_at": settled_at
-                }))
-                .send()
-                .await?;
-
-            if response.status().is_success() {
-                return Ok(());
-            }
-
-            let body = response.text().await.unwrap_or_default();
-            warn!("Gateway settle error (attempt {}): {}", attempts, body);
-            if attempts >= 5 {
-                return Err(anyhow::anyhow!("Gateway settle error: {}", body));
-            }
-            tokio::time::sleep(std::time::Duration::from_secs(2_u64.pow(attempts))).await;
-        }
+        self.post_gateway_json(
+            "/v1/batches/settled",
+            serde_json::json!({
+                "batch_id": batch_id,
+                "settled_at": settled_at
+            }),
+            "settle batch",
+        )
+        .await
     }
 
     async fn handle_failure_event(&self, event: &RawEvent) -> Result<()> {
@@ -229,29 +239,105 @@ impl ObserverIndexer {
         let batch_id = parse_hex_u128(&event.data[batch_index])?.to_string();
         let failure_reason = event.data[reason_index].clone();
         let failed_at = chrono::Utc::now().timestamp();
+        self.post_gateway_json(
+            "/v1/batches/failed",
+            serde_json::json!({
+                "batch_id": batch_id,
+                "failure_reason": failure_reason,
+                "failed_at": failed_at
+            }),
+            "report batch failure",
+        )
+        .await
+    }
 
+    async fn handle_intent_commit_event(&self, event: &RawEvent) -> Result<()> {
+        let intent_id_index = self.config.intent_commit_intent_id_index;
+        let user_index = self.config.intent_commit_user_index;
+        if event.data.len() <= intent_id_index || event.data.len() <= user_index {
+            return Err(anyhow::anyhow!("Intent commit event data missing fields"));
+        }
+
+        let intent_id = normalize_hex_felt(&event.data[intent_id_index])?;
+        let user_address = normalize_hex_felt(&event.data[user_index])?;
+        let tx_hash = normalize_hex_felt(&event.transaction_hash)?;
+
+        self.post_gateway_json(
+            &format!("/v1/intents/{}/onchain", intent_id),
+            serde_json::json!({
+                "action": "COMMITTED",
+                "user_address": user_address,
+                "tx_hash": tx_hash,
+            }),
+            "reconcile intent commit",
+        )
+        .await
+    }
+
+    async fn handle_intent_cancel_event(&self, event: &RawEvent) -> Result<()> {
+        let intent_id_index = self.config.intent_cancel_intent_id_index;
+        let user_index = self.config.intent_cancel_user_index;
+        if event.data.len() <= intent_id_index || event.data.len() <= user_index {
+            return Err(anyhow::anyhow!("Intent cancel event data missing fields"));
+        }
+
+        let intent_id = normalize_hex_felt(&event.data[intent_id_index])?;
+        let user_address = normalize_hex_felt(&event.data[user_index])?;
+        let tx_hash = normalize_hex_felt(&event.transaction_hash)?;
+
+        self.post_gateway_json(
+            &format!("/v1/intents/{}/onchain", intent_id),
+            serde_json::json!({
+                "action": "CANCELED",
+                "user_address": user_address,
+                "tx_hash": tx_hash,
+            }),
+            "reconcile intent cancel",
+        )
+        .await
+    }
+
+    async fn post_gateway_json(
+        &self,
+        path: &str,
+        payload: serde_json::Value,
+        operation: &str,
+    ) -> Result<()> {
         let mut attempts: u32 = 0;
+        let gateway_url = self.config.gateway_url.trim_end_matches('/');
+
         loop {
             attempts += 1;
             let response = self.client
-                .post(format!("{}/v1/batches/failed", self.config.gateway_url))
-                .header(self.config.gateway_api_key_header.as_str(), self.config.gateway_api_key.as_str())
-                .json(&serde_json::json!({
-                    "batch_id": batch_id,
-                    "failure_reason": failure_reason,
-                    "failed_at": failed_at
-                }))
+                .post(format!("{}{}", gateway_url, path))
+                .header(
+                    self.config.gateway_api_key_header.as_str(),
+                    self.config.gateway_api_key.as_str(),
+                )
+                .json(&payload)
                 .send()
                 .await?;
 
-            if response.status().is_success() {
+            let status = response.status();
+
+            if status.is_success() {
                 return Ok(());
             }
 
+            if status.is_client_error() && status != reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let body = response.text().await.unwrap_or_default();
+                return Err(anyhow::anyhow!(
+                    "Gateway {} rejected request with {}: {}",
+                    operation,
+                    status,
+                    body
+                ));
+            }
+
             let body = response.text().await.unwrap_or_default();
-            warn!("Gateway failure report error (attempt {}): {}", attempts, body);
+            warn!("Gateway {} error (attempt {}): {}", operation, attempts, body);
             if attempts >= 5 {
-                return Err(anyhow::anyhow!("Gateway failure report error: {}", body));
+                return Err(anyhow::anyhow!("Gateway {} error: {}", operation, body));
             }
             tokio::time::sleep(std::time::Duration::from_secs(2_u64.pow(attempts))).await;
         }
@@ -262,6 +348,18 @@ fn parse_hex_u128(value: &str) -> Result<u128> {
     let trimmed = value.trim_start_matches("0x");
     u128::from_str_radix(trimmed, 16)
         .map_err(|e| anyhow::anyhow!("Invalid hex value {}: {}", value, e))
+}
+
+fn normalize_hex_felt(value: &str) -> Result<String> {
+    let trimmed = value.trim();
+    if !trimmed.starts_with("0x") {
+        return Err(anyhow::anyhow!("Invalid felt value {}: missing 0x prefix", value));
+    }
+    let raw = trimmed.trim_start_matches("0x");
+    if raw.is_empty() || !raw.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(anyhow::anyhow!("Invalid felt value {}", value));
+    }
+    Ok(format!("0x{}", raw.to_ascii_lowercase()))
 }
 
 fn read_checkpoint(path: &str) -> Option<u64> {
