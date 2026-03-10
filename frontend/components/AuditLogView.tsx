@@ -1,6 +1,6 @@
 'use client';
 import { motion } from 'framer-motion';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 type IntentListItem = {
   intent_id: string;
@@ -21,6 +21,10 @@ export default function AuditLogView() {
   const [items, setItems] = useState<IntentListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [showLookup, setShowLookup] = useState(false);
+  const [lookupId, setLookupId] = useState('');
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const lookupInputRef = useRef<HTMLInputElement>(null);
 
   const statusQuery = useMemo(() => {
     if (statusFilter === 'All') {
@@ -82,32 +86,51 @@ export default function AuditLogView() {
             Export CSV
           </button>
           <button
-            onClick={async () => {
-              const intentId = window.prompt('Enter intent ID (0x...)');
-              if (!intentId) {
-                return;
-              }
-              try {
-                const response = await fetch(`/api/gateway/intents/${intentId}`);
-                if (!response.ok) {
-                  setActionMessage(`Intent ${intentId} not found.`);
-                  return;
-                }
-                const payload = await response.json();
-                setActionMessage(`Intent ${intentId}: ${payload.status ?? 'unknown'} (batch ${payload.batch_id ?? '—'})`);
-              } catch {
-                setActionMessage('Failed to query intent status.');
+            onClick={() => {
+              setShowLookup((prev) => !prev);
+              setLookupId('');
+              setActionMessage(null);
+              if (!showLookup) {
+                setTimeout(() => lookupInputRef.current?.focus(), 50);
               }
             }}
-            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-text-secondary"
+            className={`rounded-lg border px-3 py-2 text-xs text-text-secondary ${showLookup ? 'border-accent-primary/50 bg-accent-primary/10' : 'border-white/10 bg-white/5'}`}
           >
-            🔍
+            Lookup
           </button>
         </div>
       </div>
 
+      {showLookup && (
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            ref={lookupInputRef}
+            type="text"
+            value={lookupId}
+            onChange={(e) => setLookupId(e.target.value)}
+            onKeyDown={async (e) => {
+              if (e.key === 'Enter') {
+                await runLookup(lookupId, setActionMessage, setIsLookingUp);
+              }
+              if (e.key === 'Escape') {
+                setShowLookup(false);
+              }
+            }}
+            placeholder="Intent ID (0x...)"
+            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-text-primary placeholder-text-muted outline-none focus:border-accent-primary/50"
+          />
+          <button
+            disabled={!lookupId.trim() || isLookingUp}
+            onClick={() => runLookup(lookupId, setActionMessage, setIsLookingUp)}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-text-secondary disabled:opacity-40"
+          >
+            {isLookingUp ? '...' : 'Go'}
+          </button>
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap gap-2 text-xs">
-        {['All', 'Pending', 'Settled', 'Canceled', 'Onchain Failed'].map((filter) => (
+        {['All', 'Awaiting Onchain', 'Pending', 'Auction', 'Settled', 'Canceled', 'Onchain Failed'].map((filter) => (
           <button
             key={filter}
             onClick={() => setStatusFilter(filter)}
@@ -161,6 +184,30 @@ export default function AuditLogView() {
       )}
     </motion.section>
   );
+}
+
+async function runLookup(
+  intentId: string,
+  setActionMessage: (msg: string | null) => void,
+  setIsLookingUp: (v: boolean) => void,
+) {
+  const trimmed = intentId.trim();
+  if (!trimmed) return;
+  setIsLookingUp(true);
+  setActionMessage(null);
+  try {
+    const response = await fetch(`/api/gateway/intents/${trimmed}`);
+    if (!response.ok) {
+      setActionMessage(`Intent ${trimmed} not found.`);
+      return;
+    }
+    const payload = await response.json();
+    setActionMessage(`${trimmed}: ${payload.status ?? 'unknown'} — batch ${payload.batch_id ?? '—'}`);
+  } catch {
+    setActionMessage('Failed to query intent status.');
+  } finally {
+    setIsLookingUp(false);
+  }
 }
 
 function formatRelativeTime(value: string): string {
