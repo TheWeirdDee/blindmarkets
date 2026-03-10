@@ -1,67 +1,104 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useIntentStore } from '../state/useIntentStore';
-
-type StarknetProvider = {
-  enable: () => Promise<string[]>;
-  selectedAddress?: string;
-};
+import {
+  WALLET_PROVIDERS,
+  connectWallet,
+  restoreWalletSession,
+  truncateAddress,
+  type WalletProviderKey,
+} from '../lib/starknetWallet';
 
 export default function WalletConnect() {
-  const { setWalletAddress, walletAddress } = useIntentStore();
+  const {
+    walletAddress,
+    walletProviderKey,
+    setWalletSession,
+    clearWalletSession,
+  } = useIntentStore();
   const [status, setStatus] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState<WalletProviderKey | null>(null);
 
-  const connectWallet = async (providerKey: 'starknet' | 'starknet_braavos' | 'starknet_argentX') => {
-    setStatus(null);
-    const provider = (window as unknown as Record<string, StarknetProvider | undefined>)[providerKey];
-    if (!provider) {
-      setStatus('Wallet provider not detected in this browser.');
+  useEffect(() => {
+    if (!walletProviderKey || walletAddress) {
       return;
     }
-    try {
-      const accounts = await provider.enable();
-      const address = accounts?.[0] ?? provider.selectedAddress;
-      if (!address) {
-        setStatus('No account returned from wallet.');
+
+    let isMounted = true;
+    restoreWalletSession(walletProviderKey).then((session) => {
+      if (!isMounted) {
         return;
       }
-      setWalletAddress(address);
-      setStatus('Wallet connected.');
+      if (session) {
+        setWalletSession(session.address, session.providerKey);
+      } else {
+        clearWalletSession();
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [clearWalletSession, setWalletSession, walletAddress, walletProviderKey]);
+
+  const onConnect = async (providerKey: WalletProviderKey) => {
+    setStatus(null);
+    setIsConnecting(providerKey);
+    try {
+      const session = await connectWallet(providerKey);
+      setWalletSession(session.address, session.providerKey);
+      setStatus(`Connected ${providerLabel(providerKey)} wallet.`);
     } catch (error) {
       setStatus(`Wallet connection failed: ${String(error)}`);
+    } finally {
+      setIsConnecting(null);
     }
   };
 
   return (
     <div className="glass-card glass-card-hover p-4">
-      <p className="text-xs uppercase tracking-[0.2em] text-text-muted">Wallets</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-[0.2em] text-text-muted">Wallets</p>
+        {walletAddress ? (
+          <button
+            type="button"
+            onClick={() => {
+              clearWalletSession();
+              setStatus('Wallet session cleared on this device.');
+            }}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-text-secondary"
+          >
+            Disconnect
+          </button>
+        ) : null}
+      </div>
+
       <div className="mt-3 grid gap-2">
-        <button
-          onClick={() => connectWallet('starknet_argentX')}
-          className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-secondary"
-        >
-          Connect Argent
-        </button>
-        <button
-          onClick={() => connectWallet('starknet_braavos')}
-          className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-secondary"
-        >
-          Connect Braavos
-        </button>
-        <button
-          onClick={() => connectWallet('starknet')}
-          className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-secondary"
-        >
-          Connect Injected
-        </button>
+        {WALLET_PROVIDERS.map((provider) => (
+          <button
+            key={provider.key}
+            type="button"
+            onClick={() => onConnect(provider.key)}
+            disabled={isConnecting !== null}
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-text-secondary disabled:opacity-50"
+          >
+            {isConnecting === provider.key ? `Connecting ${provider.label}...` : `Connect ${provider.label}`}
+          </button>
+        ))}
       </div>
+
       <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-text-secondary">
-        {walletAddress ? `Connected: ${walletAddress}` : 'Not connected'}
+        {walletAddress
+          ? `${providerLabel(walletProviderKey)}: ${truncateAddress(walletAddress)}`
+          : 'Not connected'}
       </div>
-      {status && (
-        <p className="mt-2 text-xs text-text-muted">{status}</p>
-      )}
+
+      {status ? <p className="mt-2 text-xs text-text-muted">{status}</p> : null}
     </div>
   );
+}
+
+function providerLabel(providerKey: WalletProviderKey | null): string {
+  return WALLET_PROVIDERS.find((provider) => provider.key === providerKey)?.label ?? 'Wallet';
 }
