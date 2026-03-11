@@ -63,6 +63,7 @@ export const useIntentStore = create<IntentState>()(
     {
       name: 'blindmarkets-intent-store',
       storage: createJSONStorage(() => localStorage),
+      skipHydration: true,
       partialize: (state) => ({
         draft: state.draft,
         walletAddress: state.walletAddress,
