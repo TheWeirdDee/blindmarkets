@@ -25,6 +25,9 @@ export type EncryptedIntentPayload = {
   encryptedSessionKeyHex: string;
 };
 
+// Starknet field prime — Pedersen hash requires all inputs to be < P
+const STARKNET_P = BigInt('0x0800000000000011000000000000000000000000000000000000000000000001');
+
 export function generateNonce(): string {
   const entropy = new Uint8Array(32);
   globalThis.crypto.getRandomValues(entropy);
@@ -32,7 +35,9 @@ export function generateNonce(): string {
   const combined = new Uint8Array(entropy.length + time.length);
   combined.set(entropy, 0);
   combined.set(time, entropy.length);
-  return bytesToHex(keccak_256(combined));
+  // keccak256 is 256-bit; reduce mod P so it fits in a Starknet field element
+  const raw = BigInt(bytesToHex(keccak_256(combined)));
+  return normalizeHex((raw % STARKNET_P).toString(16));
 }
 
 export function buildIntent(input: {

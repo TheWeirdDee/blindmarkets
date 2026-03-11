@@ -78,6 +78,8 @@ export function createCommitment(intent: Intent): IntentCommitment {
   };
 }
 
+const STARKNET_P = BigInt('0x0800000000000011000000000000000000000000000000000000000000000001');
+
 function generateNonce(): string {
   const entropy = new Uint8Array(32);
   globalThis.crypto.getRandomValues(entropy);
@@ -85,7 +87,8 @@ function generateNonce(): string {
   const combined = new Uint8Array(entropy.length + time.length);
   combined.set(entropy, 0);
   combined.set(time, entropy.length);
-  return bytesToHex(keccak_256(combined));
+  const raw = BigInt(bytesToHex(keccak_256(combined)));
+  return normalizeHex((raw % STARKNET_P).toString(16));
 }
 
 function computeIntentHash(input: {
