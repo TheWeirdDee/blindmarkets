@@ -1754,11 +1754,12 @@ fn validate_submit_request(payload: &SubmitIntentRequest) -> Result<(), StatusCo
     }
 
     // Lightweight hex check for fields that must be field elements
+    // encrypted_session_key is binary data (60 bytes), already validated with is_hex_bytes above.
+    // Only check field-element-sized values here.
     for (label, value) in [
         ("intent_id", payload.intent_id.as_str()),
         ("commitment", payload.commitment.as_str()),
         ("client_public_key", payload.client_public_key.as_str()),
-        ("encrypted_session_key", payload.encrypted_session_key.as_str()),
         ("signature_r", payload.user_signature[0].as_str()),
         ("signature_s", payload.user_signature[1].as_str()),
         ("nonce", payload.nonce.as_str()),
