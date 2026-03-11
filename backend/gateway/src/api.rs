@@ -58,6 +58,7 @@ struct DecryptedIntent {
     #[serde(deserialize_with = "deserialize_u128")]
     pub min_output: u128,
     pub max_fee_bps: u16,
+    #[serde(deserialize_with = "deserialize_u64")]
     pub deadline: u64,
     pub privacy_mode: u8,
     pub nonce: String,
@@ -1877,6 +1878,22 @@ where
         serde_json::Value::String(text) => text.parse::<u128>()
             .map_err(|_| serde::de::Error::custom("Invalid string for u128")),
         _ => Err(serde::de::Error::custom("Invalid type for u128")),
+    }
+}
+
+fn deserialize_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Number(num) => num
+            .as_u64()
+            .ok_or_else(|| serde::de::Error::custom("Invalid number for u64")),
+        serde_json::Value::String(text) => text
+            .parse::<u64>()
+            .map_err(|_| serde::de::Error::custom("Invalid string for u64")),
+        _ => Err(serde::de::Error::custom("Invalid type for u64")),
     }
 }
 

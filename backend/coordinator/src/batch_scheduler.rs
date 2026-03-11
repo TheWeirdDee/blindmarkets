@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use starknet::core::utils::cairo_short_string_to_felt;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, Duration};
 use tracing::{info, error, warn};
@@ -271,6 +272,13 @@ async fn report_batch_failure(
 ) -> Result<()> {
     let client = reqwest::Client::new();
     let failed_at = Utc::now().timestamp();
+    let failure_reason = format!("{:#x}", cairo_short_string_to_felt(reason)?);
+    warn!(
+        "Reporting batch {} failure {}: {}",
+        batch_id,
+        reason,
+        detail
+    );
     let response = client
         .post(format!("{}/v1/batches/failed", config.gateway_url))
         .header(
@@ -279,7 +287,7 @@ async fn report_batch_failure(
         )
         .json(&serde_json::json!({
             "batch_id": batch_id.to_string(),
-            "failure_reason": format!("{}: {}", reason, detail),
+            "failure_reason": failure_reason,
             "failed_at": failed_at
         }))
         .send()
