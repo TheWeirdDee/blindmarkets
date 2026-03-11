@@ -58,7 +58,7 @@ export default function ApiPage() {
       <hr />
 
       <h2>Base URL</h2>
-      <DocCode language="bash">{`https://your-gateway.up.railway.app`}</DocCode>
+      <DocCode language="bash">{`https://gateway-production-7e9c.up.railway.app`}</DocCode>
       <p>All paths below are relative to this base.</p>
 
       <hr />

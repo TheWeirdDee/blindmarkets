@@ -313,7 +313,7 @@ export default function IntentComposer() {
                   className="w-full bg-transparent text-2xl font-semibold outline-none"
                   placeholder="0"
                 />
-                <span className="text-xs text-text-secondary">{draft.assetIn || '—'}</span>
+                <span className="text-xs text-text-secondary">{draft.assetIn ? truncateAddress(draft.assetIn) : '—'}</span>
               </div>
               <p className="mt-1 text-xs text-text-muted">Authorization comes from the connected wallet.</p>
             </div>

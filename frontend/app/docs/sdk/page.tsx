@@ -7,7 +7,7 @@ export default function SdkPage() {
     <article className="prose-docs">
       <h1>TypeScript SDK</h1>
       <p className="lead">
-        <code>@blindmarkets/sdk</code> gives you everything you need to build on top of
+        <code>@winsznx/blindmarkets-sdk</code> gives you everything you need to build on top of
         BlindMarkets — intent construction, encryption, gateway communication, and status
         polling. Works in Node.js and the browser.
       </p>
@@ -15,7 +15,7 @@ export default function SdkPage() {
       <hr />
 
       <h2>Install</h2>
-      <DocCode language="bash">{`npm install @blindmarkets/sdk`}</DocCode>
+      <DocCode language="bash">{`npm install @winsznx/blindmarkets-sdk`}</DocCode>
       <p>Or with yarn / pnpm / bun — same package name.</p>
 
       <hr />
@@ -27,10 +27,10 @@ export default function SdkPage() {
         configurable timeout.
       </p>
       <DocCode filename="client.ts" language="typescript">{`
-import { GatewayClient } from '@blindmarkets/sdk';
+import { GatewayClient } from '@winsznx/blindmarkets-sdk';
 
 const client = new GatewayClient({
-  baseUrl: 'https://your-gateway.up.railway.app',
+  baseUrl: 'https://gateway-production-7e9c.up.railway.app',
   apiKeyHeader: 'X-API-KEY',
   apiKey: process.env.GATEWAY_API_KEY!,
   timeoutMs: 10_000,
@@ -50,7 +50,7 @@ const client = new GatewayClient({
         a <code>ValidationError</code>, not a silent failure later.
       </p>
       <DocCode filename="build-intent.ts" language="typescript">{`
-import { IntentBuilder } from '@blindmarkets/sdk';
+import { IntentBuilder } from '@winsznx/blindmarkets-sdk';
 
 const intent = new IntentBuilder()
   .userAddress('0xYOUR_WALLET_ADDRESS')
@@ -78,7 +78,7 @@ const intent = new IntentBuilder()
         sent in plain text.
       </p>
       <DocCode filename="submit.ts" language="typescript">{`
-import { encryptIntentForGateway, createCommitment } from '@blindmarkets/sdk';
+import { encryptIntentForGateway, createCommitment } from '@winsznx/blindmarkets-sdk';
 
 // Fetch the gateway's current public key
 const { gateway_public_key } = await client.getGatewayPublicKey();
@@ -169,7 +169,7 @@ const { intents } = await client.listIntents({
       <h2>Error handling</h2>
       <p>The SDK throws two error types. Import them to catch specifically:</p>
       <DocCode filename="error-handling.ts" language="typescript">{`
-import { ValidationError, NetworkError } from '@blindmarkets/sdk';
+import { ValidationError, NetworkError } from '@winsznx/blindmarkets-sdk';
 
 try {
   const intent = new IntentBuilder().build(); // throws — missing required fields

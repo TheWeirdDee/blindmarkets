@@ -1,12 +1,12 @@
 ---
 title: TypeScript SDK
-description: Install and use @blindmarkets/sdk to build on top of BlindMarkets from Node.js or the browser
+description: Install and use @winsznx/blindmarkets-sdk to build on top of BlindMarkets from Node.js or the browser
 ---
 
 ## Install
 
 ```bash
-npm install @blindmarkets/sdk
+npm install @winsznx/blindmarkets-sdk
 ```
 
 Works with yarn, pnpm, and bun too. The package is ESM-compatible and ships TypeScript types.
@@ -18,10 +18,10 @@ Works with yarn, pnpm, and bun too. The package is ESM-compatible and ships Type
 `GatewayClient` handles all HTTP communication. It retries on rate limits and server errors with exponential backoff.
 
 ```typescript
-import { GatewayClient } from '@blindmarkets/sdk';
+import { GatewayClient } from '@winsznx/blindmarkets-sdk';
 
 const client = new GatewayClient({
-  baseUrl: 'https://your-gateway.up.railway.app',
+  baseUrl: 'https://gateway-production-7e9c.up.railway.app',
   apiKeyHeader: 'X-API-KEY',
   apiKey: process.env.GATEWAY_API_KEY!,
   timeoutMs: 10_000,
@@ -39,7 +39,7 @@ const client = new GatewayClient({
 `IntentBuilder` constructs the order object and computes all commitments your wallet needs to sign. It validates every field before returning — missing or invalid inputs throw a `ValidationError` immediately.
 
 ```typescript
-import { IntentBuilder } from '@blindmarkets/sdk';
+import { IntentBuilder } from '@winsznx/blindmarkets-sdk';
 
 const intent = new IntentBuilder()
   .userAddress('0xYOUR_WALLET_ADDRESS')
@@ -62,7 +62,7 @@ The builder generates a random nonce and derives the intent ID, amount commitmen
 Before sending to the gateway, encrypt the intent using the gateway's current X25519 public key. The SDK uses AES-256-GCM — actual amounts never travel in plain text.
 
 ```typescript
-import { encryptIntentForGateway, createCommitment } from '@blindmarkets/sdk';
+import { encryptIntentForGateway, createCommitment } from '@winsznx/blindmarkets-sdk';
 
 // Fetch the gateway's current public key
 const { gateway_public_key } = await client.getGatewayPublicKey();
@@ -151,7 +151,7 @@ const { intents } = await client.listIntents({
 The SDK throws two typed errors:
 
 ```typescript
-import { ValidationError, NetworkError } from '@blindmarkets/sdk';
+import { ValidationError, NetworkError } from '@winsznx/blindmarkets-sdk';
 
 try {
   const intent = new IntentBuilder().build(); // throws — missing required fields
