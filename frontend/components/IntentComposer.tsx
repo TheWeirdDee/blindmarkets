@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import clsx from 'clsx';
 import { MAX_INTENT_DEADLINE_MINUTES, useIntentStore } from '../state/useIntentStore';
 import { buildIntent, encryptIntentForGateway, generateNonce } from '../lib/intentCrypto';
+import type { IntentPayload } from '../lib/intentCrypto';
 import {
   buildCancelIntentCall,
   buildCommitIntentCall,
@@ -34,6 +35,7 @@ export default function IntentComposer() {
   const [intentHash, setIntentHash] = useState('');
   const [intentId, setIntentId] = useState('');
   const [preparedNonce, setPreparedNonce] = useState('');
+  const [preparedIntent, setPreparedIntent] = useState<IntentPayload | null>(null);
   const [statusIntentId, setStatusIntentId] = useState('');
   const [statusResult, setStatusResult] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -44,6 +46,7 @@ export default function IntentComposer() {
 
   useEffect(() => {
     setPreparedNonce('');
+    setPreparedIntent(null);
     setIntentHash('');
     setIntentId('');
   }, [
@@ -98,6 +101,7 @@ export default function IntentComposer() {
         nonce,
       });
       setPreparedNonce(nonce);
+      setPreparedIntent(intent);
       setIntentHash(intent.intentHash);
       setIntentId(intent.intentId);
       setStatusIntentId(intent.intentId);
@@ -122,7 +126,7 @@ export default function IntentComposer() {
       setStatusMessage(deadlineError);
       return;
     }
-    if (!preparedNonce) {
+    if (!preparedNonce || !preparedIntent) {
       setStatusMessage('Prepare the intent before submitting.');
       return;
     }
@@ -134,7 +138,7 @@ export default function IntentComposer() {
         throw new Error('Connected wallet changed. Re-prepare the intent and try again.');
       }
 
-      const intent = buildPreparedIntent(walletAddress, draft, privacy, preparedNonce);
+      const intent = preparedIntent;
       setIntentHash(intent.intentHash);
       setIntentId(intent.intentId);
       setStatusIntentId(intent.intentId);
@@ -165,12 +169,14 @@ export default function IntentComposer() {
         }),
       });
 
-      if (!storageResponse.ok) {
+      if (!storageResponse.ok && storageResponse.status !== 409) {
         throw new Error(await extractGatewayError(storageResponse));
       }
 
       const transaction = await session.account.execute([buildCommitIntentCall(intent)]);
       const txHash = normalizeHex(transaction.transaction_hash);
+      setPreparedNonce('');
+      setPreparedIntent(null);
 
       const reconcileResponse = await fetch(`/api/gateway/intents/${intent.intentId}/onchain`, {
         method: 'POST',
@@ -536,28 +542,6 @@ async function resolveWalletSession(
   const session = restored ?? await connectWallet(providerKey);
   setWalletSession(session.address, session.providerKey);
   return session;
-}
-
-function buildPreparedIntent(
-  walletAddress: string,
-  draft: ReturnType<typeof useIntentStore.getState>['draft'],
-  privacy: ReturnType<typeof useIntentStore.getState>['draft']['privacyMode'],
-  nonce: string
-) {
-  const amount = parseBigint(draft.amount);
-  const minOut = parseBigint(draft.minOutput);
-  const deadline = BigInt(Math.floor(Date.now() / 1000) + draft.deadlineMinutes * 60);
-  return buildIntent({
-    userAddress: walletAddress,
-    assetIn: draft.assetIn,
-    assetOut: draft.assetOut,
-    amount,
-    minOutput: minOut,
-    maxFeeBps: draft.maxFeeBps,
-    deadline,
-    privacyMode: privacy,
-    nonce,
-  });
 }
 
 async function extractGatewayError(response: Response): Promise<string> {
