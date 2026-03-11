@@ -205,10 +205,17 @@ function privacyModeToNumber(mode: IntentPayload['privacyMode']): number {
 }
 
 function normalizeHex(value: string): string {
-  if (!value) {
-    return value;
+  const normalized = value.trim();
+  if (!normalized) {
+    return normalized;
   }
-  return value.startsWith('0x') ? value.toLowerCase() : `0x${value.toLowerCase()}`;
+  if (normalized.startsWith('0x') || normalized.startsWith('0X')) {
+    return `0x${normalized.slice(2).toLowerCase()}`;
+  }
+  if (/^\d+$/.test(normalized)) {
+    return `0x${BigInt(normalized).toString(16)}`;
+  }
+  return `0x${normalized.toLowerCase()}`;
 }
 
 function bigintToHex(value: bigint): string {

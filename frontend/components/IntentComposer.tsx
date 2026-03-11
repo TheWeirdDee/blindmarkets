@@ -593,7 +593,17 @@ function isZeroAddress(value: string): boolean {
 }
 
 function normalizeHex(value: string): string {
-  return value.startsWith('0x') ? value.toLowerCase() : `0x${value.toLowerCase()}`;
+  const normalized = value.trim();
+  if (!normalized) {
+    return normalized;
+  }
+  if (normalized.startsWith('0x') || normalized.startsWith('0X')) {
+    return `0x${normalized.slice(2).toLowerCase()}`;
+  }
+  if (/^\d+$/.test(normalized)) {
+    return `0x${BigInt(normalized).toString(16)}`;
+  }
+  return `0x${normalized.toLowerCase()}`;
 }
 
 function validateDeadlineMinutes(value: number): string | null {
