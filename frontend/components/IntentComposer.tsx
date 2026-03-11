@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
-import { useIntentStore } from '../state/useIntentStore';
+import { MAX_INTENT_DEADLINE_MINUTES, useIntentStore } from '../state/useIntentStore';
 import { buildIntent, encryptIntentForGateway, generateNonce } from '../lib/intentCrypto';
 import {
   buildCancelIntentCall,
@@ -67,6 +67,11 @@ export default function IntentComposer() {
       setStatusMessage('Complete all intent fields before preparing.');
       return;
     }
+    const deadlineError = validateDeadlineMinutes(draft.deadlineMinutes);
+    if (deadlineError) {
+      setStatusMessage(deadlineError);
+      return;
+    }
     if (!isHex(walletAddress) || !isHex(draft.assetIn) || !isHex(draft.assetOut)) {
       setStatusMessage('Addresses must be hex values starting with 0x.');
       return;
@@ -110,6 +115,11 @@ export default function IntentComposer() {
     }
     if (!draft.assetIn || !draft.assetOut || !draft.amount || !draft.minOutput || !draft.deadlineMinutes) {
       setStatusMessage('Complete all intent fields before submitting.');
+      return;
+    }
+    const deadlineError = validateDeadlineMinutes(draft.deadlineMinutes);
+    if (deadlineError) {
+      setStatusMessage(deadlineError);
       return;
     }
     if (!preparedNonce) {
@@ -323,15 +333,18 @@ export default function IntentComposer() {
                 <input
                   type="number"
                   min="1"
+                  max={MAX_INTENT_DEADLINE_MINUTES}
                   step="1"
                   value={draft.deadlineMinutes}
-                  onChange={(event) => setDraft({ deadlineMinutes: Number(event.target.value) })}
+                  onChange={(event) => setDraft({ deadlineMinutes: normalizeDeadlineMinutesInput(event.target.value) })}
                   className="w-full bg-transparent text-2xl font-semibold outline-none"
                   placeholder="0"
                 />
                 <span className="text-xs text-text-secondary">minutes</span>
               </div>
-              <p className="mt-1 text-xs text-text-muted">Stored at gateway, committed with your wallet.</p>
+              <p className="mt-1 text-xs text-text-muted">
+                Stored at gateway, committed with your wallet. Max {MAX_INTENT_DEADLINE_MINUTES} minute{MAX_INTENT_DEADLINE_MINUTES === 1 ? '' : 's'}.
+              </p>
             </div>
           </div>
 
@@ -581,4 +594,22 @@ function isZeroAddress(value: string): boolean {
 
 function normalizeHex(value: string): string {
   return value.startsWith('0x') ? value.toLowerCase() : `0x${value.toLowerCase()}`;
+}
+
+function validateDeadlineMinutes(value: number): string | null {
+  if (!Number.isFinite(value) || value < 1) {
+    return 'Deadline must be at least 1 minute.';
+  }
+  if (value > MAX_INTENT_DEADLINE_MINUTES) {
+    return `Deadline exceeds the gateway limit of ${MAX_INTENT_DEADLINE_MINUTES} minute${MAX_INTENT_DEADLINE_MINUTES === 1 ? '' : 's'}.`;
+  }
+  return null;
+}
+
+function normalizeDeadlineMinutesInput(value: string): number {
+  const parsed = Math.floor(Number(value));
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0;
+  }
+  return Math.min(parsed, MAX_INTENT_DEADLINE_MINUTES);
 }
