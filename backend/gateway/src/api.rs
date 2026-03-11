@@ -1740,7 +1740,7 @@ fn validate_submit_request(payload: &SubmitIntentRequest) -> Result<(), StatusCo
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    if payload.user_signature.len() != 2 {
+    if payload.user_signature.len() < 2 {
         tracing::warn!("user_signature must include r and s");
         return Err(StatusCode::BAD_REQUEST);
     }

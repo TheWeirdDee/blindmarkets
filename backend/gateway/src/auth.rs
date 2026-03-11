@@ -34,7 +34,7 @@ pub fn validate_signature_format(
     message_hash: &str,
     signature: &[String],
 ) -> Result<(), String> {
-    if signature.len() != 2 {
+    if signature.len() < 2 {
         return Err("Invalid signature length".to_string());
     }
     if !user_address.starts_with("0x") || user_address.len() < 3 {
@@ -43,11 +43,10 @@ pub fn validate_signature_format(
     if !message_hash.starts_with("0x") || message_hash.len() < 3 {
         return Err("Invalid message hash: must start with 0x".to_string());
     }
-    if !signature[0].starts_with("0x") || signature[0].len() < 3 {
-        return Err("Invalid signature r: must start with 0x".to_string());
-    }
-    if !signature[1].starts_with("0x") || signature[1].len() < 3 {
-        return Err("Invalid signature s: must start with 0x".to_string());
+    for (i, elem) in signature.iter().enumerate() {
+        if !elem.starts_with("0x") || elem.len() < 3 {
+            return Err(format!("Invalid signature element {}: must start with 0x", i));
+        }
     }
     Ok(())
 }
@@ -65,12 +64,13 @@ pub async fn verify_signature(
     let selector = get_selector_from_name("is_valid_signature")
         .map_err(|e| format!("Selector error: {}", e))?;
 
-    let calldata = vec![
+    let mut calldata = vec![
         message_hash.to_string(),
-        "0x2".to_string(),
-        signature[0].clone(),
-        signature[1].clone(),
+        format!("{:#x}", signature.len()),
     ];
+    for elem in signature {
+        calldata.push(elem.clone());
+    }
 
     let request = JsonRpcRequest {
         jsonrpc: "2.0",
