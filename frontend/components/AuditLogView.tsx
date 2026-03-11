@@ -19,6 +19,7 @@ type IntentListResponse = {
 export default function AuditLogView() {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [items, setItems] = useState<IntentListItem[]>([]);
+  const [selectedIntentIds, setSelectedIntentIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [showLookup, setShowLookup] = useState(false);
@@ -32,6 +33,11 @@ export default function AuditLogView() {
     }
     return statusFilter.toUpperCase().replace(/\s+/g, '_');
   }, [statusFilter]);
+
+  const selectedItems = useMemo(
+    () => items.filter((item) => selectedIntentIds.includes(item.intent_id)),
+    [items, selectedIntentIds]
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -67,6 +73,10 @@ export default function AuditLogView() {
       isMounted = false;
     };
   }, [statusQuery]);
+
+  useEffect(() => {
+    setSelectedIntentIds((current) => current.filter((id) => items.some((item) => item.intent_id === id)));
+  }, [items]);
 
   return (
     <motion.section
@@ -145,40 +155,123 @@ export default function AuditLogView() {
         ))}
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
-        <div className="grid grid-cols-5 gap-2 bg-white/5 px-4 py-2 text-xs text-text-muted">
-          <span>ID</span>
-          <span>User</span>
-          <span>Batch</span>
-          <span>Status</span>
-          <span>Time</span>
-        </div>
+      <div className="mt-4 overflow-hidden rounded-xl border border-white/10 bg-white/4">
         {isLoading && (
           <div className="px-4 py-3 text-sm text-text-secondary">Loading intents...</div>
         )}
         {!isLoading && items.length === 0 && (
           <div className="px-4 py-3 text-sm text-text-secondary">No intents found.</div>
         )}
-        {items.map((intent) => (
-          <div key={intent.intent_id} className="grid grid-cols-5 gap-2 px-4 py-3 text-sm text-text-secondary">
-            <span className="truncate">{intent.intent_id}</span>
-            <span className="truncate">{intent.user_address}</span>
-            <span>{intent.batch_id}</span>
-            <span>{intent.status}</span>
-            <span>{formatRelativeTime(intent.created_at)}</span>
+        {!isLoading && items.length > 0 ? (
+          <div className="max-h-[19rem] space-y-2 overflow-y-auto p-2">
+            {items.map((intent) => {
+              const isSelected = selectedIntentIds.includes(intent.intent_id);
+              return (
+                <button
+                  key={intent.intent_id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedIntentIds((current) =>
+                      current.includes(intent.intent_id)
+                        ? current.filter((id) => id !== intent.intent_id)
+                        : [...current, intent.intent_id]
+                    );
+                  }}
+                  className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                    isSelected
+                      ? 'border-accent-primary/60 bg-accent-primary/10'
+                      : 'border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/8'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span
+                      className={`mt-1 h-4 w-4 rounded-full border ${
+                        isSelected ? 'border-accent-primary bg-accent-primary' : 'border-white/20'
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm text-text-primary">
+                          {truncateHex(intent.intent_id, 10)}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/8 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-text-secondary">
+                          {formatStatusLabel(intent.status)}
+                        </span>
+                        <span className="text-xs text-text-muted">Batch {intent.batch_id}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-muted">
+                        <span>User {truncateHex(intent.user_address, 8)}</span>
+                        <span>{formatRelativeTime(intent.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        ))}
+        ) : null}
       </div>
 
-      <button
-        onClick={() => {
-          setActionMessage('Decryption is available in solver workflows. Opening intent composer.');
-          window.location.href = '/intent';
-        }}
-        className="mt-4 w-full rounded-xl bg-white/10 px-4 py-3 text-xs text-text-secondary"
-      >
-        Decrypt selected intents
-      </button>
+      <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-text-muted">Selected Intents</p>
+            <p className="mt-1 text-xs text-text-secondary">
+              Select rows to inspect or copy their IDs. Gateway decryption stays solver-side.
+            </p>
+          </div>
+          {selectedIntentIds.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setSelectedIntentIds([])}
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-text-secondary"
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+
+        {selectedItems.length === 0 ? (
+          <p className="mt-4 text-sm text-text-muted">No intents selected yet.</p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {selectedItems.map((intent) => (
+              <div
+                key={intent.intent_id}
+                className="rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-xs text-text-secondary"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-text-primary">{intent.intent_id}</span>
+                  <span className="rounded-full border border-white/10 bg-white/8 px-2 py-1 uppercase tracking-[0.16em] text-[10px]">
+                    {formatStatusLabel(intent.status)}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-text-muted">
+                  <span>User {intent.user_address}</span>
+                  <span>Batch {intent.batch_id}</span>
+                  <span>{formatRelativeTime(intent.created_at)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          type="button"
+          disabled={selectedIntentIds.length === 0}
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(selectedIntentIds.join('\n'));
+              setActionMessage(`Copied ${selectedIntentIds.length} intent ID${selectedIntentIds.length === 1 ? '' : 's'}.`);
+            } catch {
+              setActionMessage('Failed to copy selected intent IDs.');
+            }
+          }}
+          className="mt-4 w-full rounded-xl bg-white/10 px-4 py-3 text-xs text-text-secondary disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Copy selected intent IDs
+        </button>
+      </div>
       {actionMessage && (
         <p className="mt-2 text-xs text-text-muted">{actionMessage}</p>
       )}
@@ -230,6 +323,21 @@ function formatRelativeTime(value: string): string {
   }
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays}d ago`;
+}
+
+function formatStatusLabel(value: string): string {
+  return value
+    .toLowerCase()
+    .split('_')
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ');
+}
+
+function truncateHex(value: string, visible: number): string {
+  if (value.length <= visible * 2 + 2) {
+    return value;
+  }
+  return `${value.slice(0, visible)}…${value.slice(-visible)}`;
 }
 
 function downloadCsv(items: IntentListItem[]) {

@@ -29,8 +29,6 @@ export default function IntentComposer() {
     walletProviderKey,
     setWalletSession,
   } = useIntentStore();
-  const [minOutput, setMinOutput] = useState(Number(draft.minOutput) || 0);
-  const [maxFee, setMaxFee] = useState(draft.maxFeeBps ? draft.maxFeeBps / 100 : 0);
   const [privacy, setPrivacy] = useState(draft.privacyMode);
   const [intentHash, setIntentHash] = useState('');
   const [intentId, setIntentId] = useState('');
@@ -43,6 +41,12 @@ export default function IntentComposer() {
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const minOutputValue = parseOptionalBigint(draft.minOutput);
+  const amountValue = parseOptionalBigint(draft.amount);
+  const minOutputCap = resolveMinOutputCap(amountValue, minOutputValue);
+  const minOutputSliderValue =
+    minOutputCap > 0n ? Number((minOutputValue * 1000n) / minOutputCap) : 0;
+  const maxFeePercent = draft.maxFeeBps / 100;
 
   useEffect(() => {
     setPreparedNonce('');
@@ -429,35 +433,42 @@ export default function IntentComposer() {
                 <div>
                   <div className="flex items-center justify-between text-xs text-text-muted">
                     <span>Min Output</span>
-                    <span className="text-text-secondary">{minOutput.toLocaleString()} {draft.assetOut || ''}</span>
+                    <span className="text-text-secondary">
+                      {formatIntegerString(draft.minOutput)} {draft.assetOut || ''}
+                    </span>
                   </div>
                   <input
                     type="range"
                     min={0}
-                    max={minOutput > 0 ? Math.max(minOutput * 1.2, minOutput + 1) : 100}
-                    value={minOutput}
+                    max={1000}
+                    step={1}
+                    value={minOutputSliderValue}
                     onChange={(event) => {
-                      const value = Number(event.target.value);
-                      setMinOutput(value);
-                      setDraft({ minOutput: value.toString() });
+                      const sliderValue = BigInt(event.target.value);
+                      const nextValue = sliderValue === 0n
+                        ? 0n
+                        : clampBigint((minOutputCap * sliderValue) / 1000n, 1n, minOutputCap);
+                      setDraft({ minOutput: nextValue.toString() });
                     }}
                     className="mt-2 w-full"
                   />
+                  <p className="mt-2 text-[11px] text-text-muted">
+                    Uses a relative scale so large base-unit numbers do not jump to the end of the rail.
+                  </p>
                 </div>
                 <div>
                   <div className="flex items-center justify-between text-xs text-text-muted">
                     <span>Max Fee</span>
-                    <span className="text-text-secondary">{maxFee.toFixed(2)}%</span>
+                    <span className="text-text-secondary">{maxFeePercent.toFixed(2)}%</span>
                   </div>
                   <input
                     type="range"
                     min={0}
                     max={1}
                     step={0.01}
-                    value={maxFee}
+                    value={maxFeePercent}
                     onChange={(event) => {
                       const value = Number(event.target.value);
-                      setMaxFee(value);
                       setDraft({ maxFeeBps: Math.round(value * 100) });
                     }}
                     className="mt-2 w-full"
@@ -502,7 +513,7 @@ export default function IntentComposer() {
             </div>
             <div>
               <p className="text-xs text-text-muted">Total Cost</p>
-              <p className="text-sm">Wallet gas + solver fee ceiling {maxFee.toFixed(2)}%</p>
+              <p className="text-sm">Wallet gas + solver fee ceiling {maxFeePercent.toFixed(2)}%</p>
             </div>
             <div className="flex flex-col gap-2">
               <button
@@ -566,6 +577,14 @@ function parseBigint(value: string): bigint {
   return BigInt(normalized);
 }
 
+function parseOptionalBigint(value: string): bigint {
+  const normalized = value.trim();
+  if (!/^\d+$/.test(normalized)) {
+    return 0n;
+  }
+  return BigInt(normalized);
+}
+
 function isHex(value: string): boolean {
   const normalized = value.startsWith('0x') ? value.slice(2) : value;
   return normalized.length > 0 && /^[0-9a-fA-F]+$/.test(normalized);
@@ -598,6 +617,34 @@ function validateDeadlineMinutes(value: number): string | null {
     return `Deadline exceeds the gateway limit of ${MAX_INTENT_DEADLINE_MINUTES} minute${MAX_INTENT_DEADLINE_MINUTES === 1 ? '' : 's'}.`;
   }
   return null;
+}
+
+function resolveMinOutputCap(amount: bigint, currentMinOutput: bigint): bigint {
+  const base = maxBigint(amount, currentMinOutput, 1n);
+  const padded = base + (base / 5n) + 1n;
+  return maxBigint(padded, 100n);
+}
+
+function clampBigint(value: bigint, min: bigint, max: bigint): bigint {
+  if (value < min) {
+    return min;
+  }
+  if (value > max) {
+    return max;
+  }
+  return value;
+}
+
+function maxBigint(...values: bigint[]): bigint {
+  return values.reduce((current, value) => (value > current ? value : current), values[0] ?? 0n);
+}
+
+function formatIntegerString(value: string): string {
+  const normalized = value.trim();
+  if (!/^\d+$/.test(normalized)) {
+    return '0';
+  }
+  return normalized.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 function normalizeDeadlineMinutesInput(value: string): number {
