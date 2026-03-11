@@ -17,6 +17,16 @@ export default function SdkPage() {
       <h2>Install</h2>
       <DocCode language="bash">{`npm install @winsznx/blindmarkets-sdk`}</DocCode>
       <p>Or with yarn / pnpm / bun — same package name.</p>
+      <p>
+        Published on GitHub Packages:{' '}
+        <a
+          href="https://github.com/winsznx/blindmarkets/pkgs/npm/blindmarkets-sdk"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          @winsznx/blindmarkets-sdk
+        </a>
+      </p>
 
       <hr />
 
