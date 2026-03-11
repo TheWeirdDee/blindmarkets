@@ -6,6 +6,15 @@ const nextConfig = {
   swcMinify: true,
   output: 'standalone',
   transpilePackages: ['starknet'],
+  async redirects() {
+    return [
+      {
+        source: '/favicon.ico',
+        destination: '/icon.svg',
+        permanent: false,
+      },
+    ];
+  },
   webpack: (config) => {
     // Force starknet to use its CJS build.
     // The package's "browser" export condition points to index.global.js,
