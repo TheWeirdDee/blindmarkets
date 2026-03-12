@@ -1097,10 +1097,23 @@ pub async fn reconcile_onchain_intent(
             }
 
             if intent.status == "AWAITING_ONCHAIN" || intent.status == "ONCHAIN_FAILED" {
+                let reassigned_batch_id = compute_current_batch_id(
+                    config.intents.genesis_timestamp,
+                    config.intents.batch_window_seconds,
+                );
+                if reassigned_batch_id != intent.batch_id {
+                    tracing::info!(
+                        "Reassigning committed intent {} from batch {} to {}",
+                        intent_id,
+                        intent.batch_id,
+                        reassigned_batch_id
+                    );
+                }
                 sqlx::query!(
                     r#"
                     UPDATE intents
                     SET status = 'PENDING',
+                        batch_id = $4,
                         onchain_tx_hash = $2,
                         onchain_committed_at = $3
                     WHERE intent_id = $1
@@ -1108,6 +1121,7 @@ pub async fn reconcile_onchain_intent(
                     intent_id,
                     payload.tx_hash,
                     now,
+                    reassigned_batch_id,
                 )
                 .execute(&pool)
                 .await

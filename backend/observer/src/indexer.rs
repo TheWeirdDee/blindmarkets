@@ -40,6 +40,17 @@ struct EventsResponse {
 }
 
 #[derive(Debug, Deserialize)]
+struct EventsErrorResponse {
+    error: JsonRpcError,
+}
+
+#[derive(Debug, Deserialize)]
+struct JsonRpcError {
+    code: i64,
+    message: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct EventsResult {
     events: Vec<RawEvent>,
     continuation_token: Option<String>,
@@ -149,14 +160,35 @@ impl ObserverIndexer {
             .send()
             .await?;
 
-        if !response.status().is_success() {
-            let body = response.text().await.unwrap_or_default();
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+
+        if !status.is_success() {
             warn!("Observer RPC error: {}", body);
             return Err(anyhow::anyhow!("Observer RPC error"));
         }
 
-        let parsed: EventsResponse = response.json().await?;
-        Ok(parsed)
+        if let Ok(parsed) = serde_json::from_str::<EventsResponse>(&body) {
+            return Ok(parsed);
+        }
+
+        if let Ok(error_response) = serde_json::from_str::<EventsErrorResponse>(&body) {
+            warn!(
+                "Observer RPC error: code={} message={}",
+                error_response.error.code,
+                error_response.error.message
+            );
+            return Err(anyhow::anyhow!(
+                "Observer RPC error {}: {}",
+                error_response.error.code,
+                error_response.error.message
+            ));
+        }
+
+        Err(anyhow::anyhow!(
+            "Unexpected observer RPC payload: {}",
+            truncate_body(&body)
+        ))
     }
 
     async fn handle_event(&mut self, event: RawEvent) -> Result<()> {
@@ -343,6 +375,14 @@ impl ObserverIndexer {
             tokio::time::sleep(std::time::Duration::from_secs(2_u64.pow(attempts))).await;
         }
     }
+}
+
+fn truncate_body(body: &str) -> String {
+    const MAX_LEN: usize = 240;
+    if body.len() <= MAX_LEN {
+        return body.to_string();
+    }
+    format!("{}...", &body[..MAX_LEN])
 }
 
 fn parse_hex_u128(value: &str) -> Result<u128> {
