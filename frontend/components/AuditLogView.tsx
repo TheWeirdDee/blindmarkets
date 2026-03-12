@@ -41,6 +41,7 @@ export default function AuditLogView() {
 
   useEffect(() => {
     let isMounted = true;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
     const run = async () => {
       setIsLoading(true);
       const params = new URLSearchParams();
@@ -69,8 +70,12 @@ export default function AuditLogView() {
       }
     };
     run();
+    intervalId = setInterval(run, 10000);
     return () => {
       isMounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
     };
   }, [statusQuery]);
 
@@ -240,16 +245,34 @@ export default function AuditLogView() {
                 key={intent.intent_id}
                 className="rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-xs text-text-secondary"
               >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-text-primary">{intent.intent_id}</span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-text-muted">Intent ID</p>
+                    <p
+                      className="mt-1 break-all font-mono text-[11px] leading-relaxed text-text-primary"
+                      title={intent.intent_id}
+                    >
+                      {intent.intent_id}
+                    </p>
+                  </div>
                   <span className="rounded-full border border-white/10 bg-white/8 px-2 py-1 uppercase tracking-[0.16em] text-[10px]">
                     {formatStatusLabel(intent.status)}
                   </span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-text-muted">
-                  <span>User {intent.user_address}</span>
-                  <span>Batch {intent.batch_id}</span>
-                  <span>{formatRelativeTime(intent.created_at)}</span>
+                <div className="mt-3 grid gap-2">
+                  <div className="rounded-lg border border-white/8 bg-white/5 px-3 py-2">
+                    <p className="text-[10px] uppercase tracking-[0.18em] text-text-muted">User</p>
+                    <p
+                      className="mt-1 break-all font-mono text-[11px] leading-relaxed text-text-secondary"
+                      title={intent.user_address}
+                    >
+                      {intent.user_address}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-[11px] text-text-muted">
+                    <span>Batch {intent.batch_id}</span>
+                    <span>{formatRelativeTime(intent.created_at)}</span>
+                  </div>
                 </div>
               </div>
             ))}
