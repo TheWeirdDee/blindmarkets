@@ -16,17 +16,20 @@ struct EventsRequest {
 struct EventsParams {
     from_block: BlockId,
     to_block: BlockId,
+    #[serde(skip_serializing_if = "Option::is_none")]
     address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     keys: Option<Vec<Vec<String>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     continuation_token: Option<String>,
     chunk_size: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(untagged)]
 enum BlockId {
-    Number { block_number: u64 },
-    Latest,
+    BlockNumber { block_number: u64 },
+    Tag(&'static str),
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,10 +138,10 @@ impl ObserverIndexer {
             jsonrpc: "2.0",
             method: "starknet_getEvents",
             params: [EventsParams {
-                    from_block: BlockId::Number {
+                    from_block: BlockId::BlockNumber {
                         block_number: self.current_block,
                     },
-                    to_block: BlockId::Latest,
+                    to_block: BlockId::Tag("latest"),
                     address: Some(address.to_string()),
                     keys: None,
                 continuation_token,
@@ -416,8 +419,8 @@ mod tests {
             jsonrpc: "2.0",
             method: "starknet_getEvents",
             params: [EventsParams {
-                from_block: BlockId::Number { block_number: 42 },
-                to_block: BlockId::Latest,
+                from_block: BlockId::BlockNumber { block_number: 42 },
+                to_block: BlockId::Tag("latest"),
                 address: Some("0x123".to_string()),
                 keys: None,
                 continuation_token: None,
@@ -431,6 +434,8 @@ mod tests {
         assert_eq!(value["params"][0]["to_block"], "latest");
         assert_eq!(value["params"][0]["address"], "0x123");
         assert_eq!(value["params"][0]["chunk_size"], 100);
+        assert!(value["params"][0].get("keys").is_none());
+        assert!(value["params"][0].get("continuation_token").is_none());
         assert!(value["params"][0].get("filter").is_none());
     }
 }
