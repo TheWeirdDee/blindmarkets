@@ -52,6 +52,13 @@ impl BatchScheduler {
         self.genesis_timestamp + (batch_id * self.batch_window_seconds)
     }
 
+    pub fn closed_batch_at_timestamp(&self, timestamp: u64) -> (u64, u64) {
+        let active_batch = self.compute_batch_id(timestamp);
+        let closed_batch_id = active_batch.saturating_sub(1);
+        let close_time = self.compute_batch_close_time(active_batch);
+        (closed_batch_id, close_time)
+    }
+
     pub fn current_batch_id(&self) -> u64 {
         self.compute_batch_id(self.current_timestamp())
     }
@@ -94,8 +101,8 @@ pub async fn run_scheduler(config: CoordinatorConfig) -> Result<()> {
             sleep(Duration::from_secs(time_until_close)).await;
         }
 
-        let batch_id = scheduler.current_batch_id();
-        let close_time = scheduler.compute_batch_close_time(batch_id);
+        let boundary_timestamp = scheduler.current_timestamp();
+        let (batch_id, close_time) = scheduler.closed_batch_at_timestamp(boundary_timestamp);
 
         info!("Batch {} closed at {}, forming batch", batch_id, close_time);
 
@@ -342,5 +349,16 @@ mod tests {
 
         let close_time2 = scheduler.compute_batch_close_time(10);
         assert_eq!(close_time2, test_config().genesis_timestamp + 300);
+    }
+
+    #[test]
+    fn test_closed_batch_at_boundary() {
+        let scheduler = BatchScheduler::new(&test_config());
+
+        let boundary_timestamp = test_config().genesis_timestamp + 90;
+        let (batch_id, close_time) = scheduler.closed_batch_at_timestamp(boundary_timestamp);
+
+        assert_eq!(batch_id, 2);
+        assert_eq!(close_time, boundary_timestamp);
     }
 }

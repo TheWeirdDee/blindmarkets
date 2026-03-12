@@ -8,29 +8,24 @@ use crate::config::ObserverConfig;
 struct EventsRequest {
     jsonrpc: &'static str,
     method: &'static str,
-    params: EventsParams,
+    params: [EventsParams; 1],
     id: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
 struct EventsParams {
-    filter: EventsFilter,
+    from_block: BlockId,
+    to_block: BlockId,
+    address: Option<String>,
+    keys: Option<Vec<Vec<String>>>,
     continuation_token: Option<String>,
     chunk_size: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct EventsFilter {
-    from_block: BlockId,
-    to_block: BlockId,
-    address: Option<String>,
-    keys: Option<Vec<Vec<String>>>,
-}
-
-#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum BlockId {
-    Number { number: u64 },
+    Number { block_number: u64 },
     Latest,
 }
 
@@ -139,18 +134,16 @@ impl ObserverIndexer {
         let request = EventsRequest {
             jsonrpc: "2.0",
             method: "starknet_getEvents",
-            params: EventsParams {
-                filter: EventsFilter {
+            params: [EventsParams {
                     from_block: BlockId::Number {
-                        number: self.current_block,
+                        block_number: self.current_block,
                     },
                     to_block: BlockId::Latest,
                     address: Some(address.to_string()),
                     keys: None,
-                },
                 continuation_token,
                 chunk_size: 100,
-            },
+            }],
             id: 1,
         };
 
@@ -411,4 +404,33 @@ fn read_checkpoint(path: &str) -> Option<u64> {
 fn write_checkpoint(path: &str, block: u64) -> Result<()> {
     std::fs::write(path, block.to_string())
         .map_err(|e| anyhow::anyhow!("Failed to write checkpoint: {}", e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_events_request_serialization_matches_rpc_shape() {
+        let request = EventsRequest {
+            jsonrpc: "2.0",
+            method: "starknet_getEvents",
+            params: [EventsParams {
+                from_block: BlockId::Number { block_number: 42 },
+                to_block: BlockId::Latest,
+                address: Some("0x123".to_string()),
+                keys: None,
+                continuation_token: None,
+                chunk_size: 100,
+            }],
+            id: 1,
+        };
+
+        let value = serde_json::to_value(request).expect("request should serialize");
+        assert_eq!(value["params"][0]["from_block"]["block_number"], 42);
+        assert_eq!(value["params"][0]["to_block"], "latest");
+        assert_eq!(value["params"][0]["address"], "0x123");
+        assert_eq!(value["params"][0]["chunk_size"], 100);
+        assert!(value["params"][0].get("filter").is_none());
+    }
 }

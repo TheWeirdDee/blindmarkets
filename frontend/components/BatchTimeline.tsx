@@ -206,9 +206,23 @@ function toEpochSeconds(value: string | number | null | undefined): number {
   if (Number.isFinite(asNumber)) {
     return asNumber;
   }
-  const parsed = Date.parse(value);
+  const parsed = parseGatewayTimestamp(value);
   if (Number.isFinite(parsed)) {
     return Math.floor(parsed / 1000);
   }
   return 0;
+}
+
+function parseGatewayTimestamp(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return Number.NaN;
+  }
+
+  const normalized = trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T');
+  if (/([zZ]|[+-]\d{2}:\d{2})$/.test(normalized)) {
+    return Date.parse(normalized);
+  }
+
+  return Date.parse(`${normalized}Z`);
 }

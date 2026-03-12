@@ -327,7 +327,7 @@ async function runLookup(
 }
 
 function formatRelativeTime(value: string): string {
-  const parsed = Date.parse(value);
+  const parsed = parseGatewayTimestamp(value);
   if (Number.isNaN(parsed)) {
     return value;
   }
@@ -346,6 +346,20 @@ function formatRelativeTime(value: string): string {
   }
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays}d ago`;
+}
+
+function parseGatewayTimestamp(value: string): number {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return Number.NaN;
+  }
+
+  const normalized = trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T');
+  if (/([zZ]|[+-]\d{2}:\d{2})$/.test(normalized)) {
+    return Date.parse(normalized);
+  }
+
+  return Date.parse(`${normalized}Z`);
 }
 
 function formatStatusLabel(value: string): string {
