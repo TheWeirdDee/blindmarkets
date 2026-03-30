@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { StarkzapWallet } from '@/lib/starkzap-wallet';
 
 export type IntentDraft = {
   assetIn: string;
@@ -11,14 +12,18 @@ export type IntentDraft = {
   privacyMode: 'public' | 'hidden-amount' | 'hidden-direction';
 };
 
+export type WalletProviderKey = 'email' | 'argent' | 'braavos';
+
 type IntentState = {
   draft: IntentDraft;
   setDraft: (draft: Partial<IntentDraft>) => void;
+  wallet: StarkzapWallet | null;
   walletAddress: string;
-  walletProviderKey: 'starknet' | 'starknet_braavos' | 'starknet_argentX' | null;
+  walletProviderKey: WalletProviderKey | null;
   setWalletSession: (
+    wallet: StarkzapWallet,
     address: string,
-    providerKey: 'starknet' | 'starknet_braavos' | 'starknet_argentX'
+    providerKey: WalletProviderKey
   ) => void;
   clearWalletSession: () => void;
 };
@@ -75,6 +80,19 @@ function sanitizeIntentDraft(draft?: Partial<IntentDraft>): IntentDraft {
   };
 }
 
+function normalizeWalletProviderKey(value: unknown): WalletProviderKey | null {
+  if (value === 'email' || value === 'argent' || value === 'braavos') {
+    return value;
+  }
+  if (value === 'starknet_argentX') {
+    return 'argent';
+  }
+  if (value === 'starknet_braavos' || value === 'starknet') {
+    return 'braavos';
+  }
+  return null;
+}
+
 const defaultDraft: IntentDraft = {
   assetIn: process.env.NEXT_PUBLIC_DEFAULT_ASSET_IN ?? '',
   assetOut: process.env.NEXT_PUBLIC_DEFAULT_ASSET_OUT ?? '',
@@ -92,13 +110,16 @@ export const useIntentStore = create<IntentState>()(
       setDraft: (draft) => set((state) => ({
         draft: sanitizeIntentDraft({ ...state.draft, ...draft })
       })),
+      wallet: null,
       walletAddress: '',
       walletProviderKey: null,
-      setWalletSession: (address, providerKey) => set(() => ({
+      setWalletSession: (wallet, address, providerKey) => set(() => ({
+        wallet,
         walletAddress: address,
         walletProviderKey: providerKey,
       })),
       clearWalletSession: () => set(() => ({
+        wallet: null,
         walletAddress: '',
         walletProviderKey: null,
       })),
@@ -112,7 +133,9 @@ export const useIntentStore = create<IntentState>()(
         return {
           ...currentState,
           ...persisted,
+          wallet: null,
           draft: sanitizeIntentDraft(persisted?.draft),
+          walletProviderKey: normalizeWalletProviderKey(persisted?.walletProviderKey),
         };
       },
       partialize: (state) => ({

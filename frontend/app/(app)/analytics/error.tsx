@@ -1,0 +1,24 @@
+'use client';
+
+type AnalyticsErrorProps = {
+  error: Error;
+  reset: () => void;
+};
+
+export default function AnalyticsError({ error, reset }: AnalyticsErrorProps) {
+  return (
+    <div className="glass-card space-y-4 p-6">
+      <p className="text-xs uppercase tracking-[0.3em] text-text-muted">Analytics Error</p>
+      <p className="text-sm text-text-secondary">
+        {error.message || 'Failed to load analytics.'}
+      </p>
+      <button
+        type="button"
+        onClick={reset}
+        className="rounded-lg bg-accent-primary px-4 py-2 text-sm font-semibold text-white"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}

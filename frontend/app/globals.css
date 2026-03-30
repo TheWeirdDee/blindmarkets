@@ -1,23 +1,68 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Sora:wght@400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --bg-primary: #050505;
-  --bg-secondary: #111111;
-  --glass-bg: rgba(255, 255, 255, 0.06);
-  --glass-border: rgba(255, 255, 255, 0.18);
-  --glass-shadow: rgba(0, 0, 0, 0.45);
-  --accent-primary: #00d1ff;
-  --accent-success: #19d3a2;
-  --accent-warning: #ff9f1c;
-  --accent-danger: #ff4d6d;
-  --accent-purple: #8f7dff;
-  --text-primary: #f5f5f5;
-  --text-secondary: #c7c7c7;
-  --text-muted: #8e8e8e;
+  /* Backgrounds */
+  --bg-base: #080c18;
+  --bg-surface: #0f1629;
+  --bg-glass: rgba(15, 22, 41, 0.6);
+  --bg-overlay: rgba(15, 22, 41, 0.9);
+
+  /* Glass */
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-strong: rgba(255, 255, 255, 0.15);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+
+  /* Text */
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --text-muted: #4b5563;
+
+  /* Accent */
+  --accent: #22d3ee;
+  --accent-subtle: rgba(34, 211, 238, 0.1);
+  --accent-foreground: #080c18;
+
+  /* Privacy modes */
+  --privacy-high: #10b981;
+  --privacy-medium: #f59e0b;
+  --privacy-public: #6b7280;
+
+  /* Status */
+  --status-success: #10b981;
+  --status-pending: #f59e0b;
+  --status-error: #ef4444;
+  --status-cancelled: #6b7280;
+
+  /* Risk tiers */
+  --risk-low: #10b981;
+  --risk-medium: #f59e0b;
+  --risk-high: #ef4444;
+
+  /* Mono */
+  --mono: #22d3ee;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Compatibility aliases for existing components */
+  --bg-primary: var(--bg-base);
+  --bg-secondary: var(--bg-surface);
+  --glass-bg: var(--bg-glass);
+  --accent-primary: var(--accent);
+  --accent-success: var(--status-success);
+  --accent-warning: var(--status-pending);
+  --accent-danger: var(--status-error);
+  --accent-purple: var(--privacy-public);
 }
 
 * {
@@ -29,11 +74,11 @@ html, body {
   margin: 0;
   min-height: 100%;
   overflow-x: hidden;
-  background: radial-gradient(1000px 520px at 14% 12%, rgba(0, 209, 255, 0.16), transparent 60%),
-              radial-gradient(900px 460px at 88% 18%, rgba(255, 159, 28, 0.14), transparent 58%),
-              linear-gradient(180deg, #050505 0%, #0b0b0b 45%, #050505 100%);
+  background: radial-gradient(1000px 520px at 14% 12%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 60%),
+              radial-gradient(900px 460px at 88% 18%, color-mix(in srgb, var(--privacy-medium) 16%, transparent), transparent 58%),
+              linear-gradient(180deg, var(--bg-base) 0%, color-mix(in srgb, var(--bg-base) 70%, var(--bg-surface)) 45%, var(--bg-base) 100%);
   color: var(--text-primary);
-  font-family: 'Sora', system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 
 a {
@@ -42,22 +87,31 @@ a {
 }
 
 .glass-card {
-  background: var(--glass-bg);
+  background: var(--bg-glass);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px var(--glass-shadow);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
 }
 
 .glass-card-hover {
-  transition: transform 0.3s ease, background 0.3s ease, border-color 0.3s ease;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
 .glass-card-hover:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.18);
-  transform: translateY(-2px);
+  border-color: var(--glass-border-strong);
+  background: rgba(15, 22, 41, 0.75);
+}
+
+.glass-card-interactive {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.glass-card-interactive:hover {
+  transform: translateY(-1px);
+  border-color: var(--glass-border-strong);
 }
 
 .gradient-border {

@@ -8,10 +8,11 @@ import {
   restoreWalletSession,
   truncateAddress,
   type WalletProviderKey,
-} from '../lib/starknetWallet';
+} from '../lib/starkzap-wallet';
 
 export default function WalletConnect() {
   const {
+    wallet,
     walletAddress,
     walletProviderKey,
     setWalletSession,
@@ -21,7 +22,7 @@ export default function WalletConnect() {
   const [isConnecting, setIsConnecting] = useState<WalletProviderKey | null>(null);
 
   useEffect(() => {
-    if (!walletProviderKey || walletAddress) {
+    if (!walletProviderKey || wallet) {
       return;
     }
 
@@ -31,7 +32,7 @@ export default function WalletConnect() {
         return;
       }
       if (session) {
-        setWalletSession(session.address, session.providerKey);
+        setWalletSession(session.wallet, session.address, session.providerKey);
       } else {
         clearWalletSession();
       }
@@ -40,14 +41,15 @@ export default function WalletConnect() {
     return () => {
       isMounted = false;
     };
-  }, [clearWalletSession, setWalletSession, walletAddress, walletProviderKey]);
+  }, [clearWalletSession, setWalletSession, wallet, walletProviderKey]);
 
   const onConnect = async (providerKey: WalletProviderKey) => {
     setStatus(null);
     setIsConnecting(providerKey);
     try {
       const session = await connectWallet(providerKey);
-      setWalletSession(session.address, session.providerKey);
+      setWalletSession(session.wallet, session.address, session.providerKey);
+      document.cookie = `blindmarkets-wallet=${session.address}; path=/; SameSite=Lax`;
       setStatus(`Connected ${providerLabel(providerKey)} wallet.`);
     } catch (error) {
       setStatus(`Wallet connection failed: ${String(error)}`);
@@ -65,6 +67,7 @@ export default function WalletConnect() {
             type="button"
             onClick={() => {
               clearWalletSession();
+              document.cookie = 'blindmarkets-wallet=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/';
               setStatus('Wallet session cleared on this device.');
             }}
             className="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-text-secondary"

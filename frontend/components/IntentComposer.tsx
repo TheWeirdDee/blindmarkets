@@ -9,11 +9,10 @@ import type { IntentPayload } from '../lib/intentCrypto';
 import {
   buildCancelIntentCall,
   buildCommitIntentCall,
-  connectWallet,
   restoreWalletSession,
   signIntentAuthorization,
   truncateAddress,
-} from '../lib/starknetWallet';
+} from '../lib/starkzap-wallet';
 
 const privacyOptions = [
   { id: 'public', label: 'Public', icon: '🔓', color: 'text-text-muted', description: 'Pair, size, and direction visible to solvers from submission.' },
@@ -25,6 +24,7 @@ export default function IntentComposer() {
   const {
     draft,
     setDraft,
+    wallet,
     walletAddress,
     walletProviderKey,
     setWalletSession,
@@ -117,7 +117,7 @@ export default function IntentComposer() {
 
   const onSubmit = async () => {
     setStatusMessage(null);
-    if (!walletProviderKey || !walletAddress) {
+    if (!walletAddress) {
       setStatusMessage('Connect a Starknet wallet before submitting.');
       return;
     }
@@ -137,8 +137,8 @@ export default function IntentComposer() {
 
     try {
       setIsSubmitting(true);
-      const session = await resolveWalletSession(walletProviderKey, setWalletSession);
-      if (normalizeHex(session.address) !== normalizeHex(walletAddress)) {
+      const activeWallet = await ensureWalletSession(wallet, walletProviderKey, setWalletSession);
+      if (normalizeHex(activeWallet.address) !== normalizeHex(walletAddress)) {
         throw new Error('Connected wallet changed. Re-prepare the intent and try again.');
       }
 
@@ -154,7 +154,7 @@ export default function IntentComposer() {
       const gatewayPublicKey = (await gatewayPublicKeyResponse.json()).gateway_public_key as string;
 
       const encrypted = await encryptIntentForGateway(intent, gatewayPublicKey);
-      const authorization = await signIntentAuthorization(session.account, intent);
+      const authorization = await signIntentAuthorization(activeWallet, intent);
 
       const storageResponse = await fetch('/api/gateway/intents', {
         method: 'POST',
@@ -177,8 +177,9 @@ export default function IntentComposer() {
         throw new Error(await extractGatewayError(storageResponse));
       }
 
-      const transaction = await session.account.execute([buildCommitIntentCall(intent)]);
-      const txHash = normalizeHex(transaction.transaction_hash);
+      const transaction = await activeWallet.execute([buildCommitIntentCall(intent)]);
+      await waitForTransactionIfSupported(transaction);
+      const txHash = extractTransactionHash(transaction);
       setPreparedNonce('');
       setPreparedIntent(null);
 
@@ -231,7 +232,7 @@ export default function IntentComposer() {
 
   const cancelIntent = async () => {
     setStatusResult(null);
-    if (!walletProviderKey || !walletAddress) {
+    if (!walletAddress) {
       setStatusResult('Connect a wallet before canceling.');
       return;
     }
@@ -242,16 +243,17 @@ export default function IntentComposer() {
 
     try {
       setIsCanceling(true);
-      const session = await resolveWalletSession(walletProviderKey, setWalletSession);
-      const transaction = await session.account.execute([buildCancelIntentCall(statusIntentId)]);
-      const txHash = normalizeHex(transaction.transaction_hash);
+      const activeWallet = await ensureWalletSession(wallet, walletProviderKey, setWalletSession);
+      const transaction = await activeWallet.execute([buildCancelIntentCall(statusIntentId)]);
+      await waitForTransactionIfSupported(transaction);
+      const txHash = extractTransactionHash(transaction);
 
       const response = await fetch(`/api/gateway/intents/${statusIntentId}/onchain`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'CANCELED',
-          user_address: session.address,
+          user_address: activeWallet.address,
           tx_hash: txHash,
         }),
       });
@@ -545,14 +547,26 @@ export default function IntentComposer() {
   );
 }
 
-async function resolveWalletSession(
-  providerKey: NonNullable<ReturnType<typeof useIntentStore.getState>['walletProviderKey']>,
+async function ensureWalletSession(
+  wallet: ReturnType<typeof useIntentStore.getState>['wallet'],
+  providerKey: ReturnType<typeof useIntentStore.getState>['walletProviderKey'],
   setWalletSession: ReturnType<typeof useIntentStore.getState>['setWalletSession']
 ) {
-  const restored = await restoreWalletSession(providerKey);
-  const session = restored ?? await connectWallet(providerKey);
-  setWalletSession(session.address, session.providerKey);
-  return session;
+  if (wallet) {
+    return wallet;
+  }
+
+  if (!providerKey) {
+    throw new Error('No wallet provider selected. Connect your wallet first.');
+  }
+
+  const session = await restoreWalletSession(providerKey);
+  if (!session) {
+    throw new Error('Wallet session expired. Reconnect and submit again.');
+  }
+
+  setWalletSession(session.wallet, session.address, session.providerKey);
+  return session.wallet;
 }
 
 async function extractGatewayError(response: Response): Promise<string> {
@@ -607,6 +621,22 @@ function normalizeHex(value: string): string {
     return `0x${BigInt(normalized).toString(16)}`;
   }
   return `0x${normalized.toLowerCase()}`;
+}
+
+async function waitForTransactionIfSupported(transaction: unknown): Promise<void> {
+  const candidate = transaction as { wait?: () => Promise<void> };
+  if (typeof candidate.wait === 'function') {
+    await candidate.wait();
+  }
+}
+
+function extractTransactionHash(transaction: unknown): string {
+  const candidate = transaction as { hash?: string; transaction_hash?: string };
+  const hash = candidate.hash ?? candidate.transaction_hash;
+  if (!hash) {
+    throw new Error('Wallet did not return a transaction hash.');
+  }
+  return normalizeHex(hash);
 }
 
 function validateDeadlineMinutes(value: number): string | null {
