@@ -2,68 +2,66 @@
 
 import { cairo, typedData } from 'starknet';
 import type { WalletAccount } from 'starknet';
-import type { IntentPayload } from './intentCrypto';
+import type { IntentPayload } from '@/lib/intentCrypto';
 
-export type WalletProviderKey = 'starknet' | 'starknet_braavos' | 'starknet_argentX';
+export type WalletProviderKey = 'email' | 'argent' | 'braavos';
+export type StarkzapWallet = WalletAccount;
 
 type InjectedWalletProvider = {
-  id?: string;
-  name?: string;
-  version?: string;
-  icon?: string;
   request: (args: { type: string; params?: Record<string, unknown> }) => Promise<unknown>;
-  on: (event: string, listener: (...args: unknown[]) => void) => void;
-  off?: (event: string, listener: (...args: unknown[]) => void) => void;
   selectedAddress?: string;
 };
 
-type WalletWindow = Window & Record<WalletProviderKey, InjectedWalletProvider | undefined>;
+type WalletWindow = Window & {
+  starknet_argentX?: InjectedWalletProvider;
+  starknet_braavos?: InjectedWalletProvider;
+};
 
 export type ConnectedWalletSession = {
-  account: WalletAccount;
+  wallet: StarkzapWallet;
   address: string;
   providerKey: WalletProviderKey;
 };
 
 export const WALLET_PROVIDERS: Array<{ key: WalletProviderKey; label: string }> = [
-  { key: 'starknet_argentX', label: 'Argent' },
-  { key: 'starknet_braavos', label: 'Braavos' },
-  { key: 'starknet', label: 'Injected' },
+  { key: 'email', label: 'Email' },
+  { key: 'argent', label: 'Argent' },
+  { key: 'braavos', label: 'Braavos' },
 ];
 
 export async function connectWallet(providerKey: WalletProviderKey): Promise<ConnectedWalletSession> {
-  const provider = getInjectedProvider(providerKey);
-  const { WalletAccount: WA } = await import('starknet');
-  const account = new WA({ nodeUrl: resolveRpcUrl() }, provider as never) as WalletAccount;
-  const accounts = await account.requestAccounts(false);
-  const address = normalizeHex(accounts[0] ?? account.address ?? provider.selectedAddress ?? '');
-  if (!address || address === '0x') {
-    throw new Error('No account returned from wallet');
+  if (providerKey === 'email') {
+    throw new Error(
+      'Email onboarding is not configured yet. Use Argent or Braavos for now.',
+    );
   }
 
+  const providerWindowKey =
+    providerKey === 'argent' ? 'starknet_argentX' : 'starknet_braavos';
+  const wallet = await connectInjectedWallet(providerWindowKey, false);
+
   return {
-    account,
-    address,
+    wallet,
+    address: normalizeHex(wallet.address),
     providerKey,
   };
 }
 
 export async function restoreWalletSession(
-  providerKey: WalletProviderKey
+  providerKey: WalletProviderKey,
 ): Promise<ConnectedWalletSession | null> {
   try {
-    const provider = getInjectedProvider(providerKey);
-    const { WalletAccount: WA } = await import('starknet');
-    const account = new WA({ nodeUrl: resolveRpcUrl() }, provider as never) as WalletAccount;
-    const accounts = await account.requestAccounts(true);
-    const address = normalizeHex(accounts[0] ?? account.address ?? provider.selectedAddress ?? '');
-    if (!address || address === '0x') {
+    if (providerKey === 'email') {
       return null;
     }
 
+    const providerWindowKey =
+      providerKey === 'argent' ? 'starknet_argentX' : 'starknet_braavos';
+    const wallet = await connectInjectedWallet(providerWindowKey, true);
+
     return {
-      account,
-      address,
+      wallet,
+      address: normalizeHex(wallet.address),
       providerKey,
     };
   } catch {
@@ -72,15 +70,15 @@ export async function restoreWalletSession(
 }
 
 export async function signIntentAuthorization(
-  account: WalletAccount,
-  intent: IntentPayload
+  wallet: StarkzapWallet,
+  intent: IntentPayload,
 ): Promise<{ signature: string[]; authorizationHash: string }> {
   const authorization = buildIntentAuthorizationTypedData(intent);
-  const signature = await account.signMessage(authorization);
+  const signature = await wallet.signMessage(authorization);
   const authorizationHash = typedData.getMessageHash(authorization, intent.userAddress);
 
   return {
-    signature: signature.map((value) => normalizeHex(String(value))),
+    signature: normalizeSignature(signature),
     authorizationHash: normalizeHex(String(authorizationHash)),
   };
 }
@@ -118,7 +116,29 @@ export function truncateAddress(address: string): string {
   if (!address || address.length < 12) {
     return address;
   }
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+async function connectInjectedWallet(
+  providerWindowKey: 'starknet_argentX' | 'starknet_braavos',
+  isSilent: boolean,
+): Promise<WalletAccount> {
+  const provider = getInjectedProvider(providerWindowKey);
+  const { WalletAccount: WA } = await import('starknet');
+  const wallet = new WA({ nodeUrl: resolveRpcUrl() }, provider as never) as WalletAccount;
+  const accounts = await wallet.requestAccounts(isSilent);
+  const address = normalizeHex(accounts[0] ?? wallet.address ?? provider.selectedAddress ?? '');
+  if (!address || address === '0x') {
+    throw new Error('No account returned from wallet');
+  }
+  return wallet;
+}
+
+function normalizeSignature(signature: unknown): string[] {
+  if (Array.isArray(signature)) {
+    return signature.map((value) => normalizeHex(String(value)));
+  }
+  return [normalizeHex(String(signature))];
 }
 
 function buildIntentAuthorizationTypedData(intent: IntentPayload) {
@@ -153,12 +173,14 @@ function buildIntentAuthorizationTypedData(intent: IntentPayload) {
   };
 }
 
-function getInjectedProvider(providerKey: WalletProviderKey): InjectedWalletProvider {
+function getInjectedProvider(
+  providerWindowKey: 'starknet_argentX' | 'starknet_braavos',
+): InjectedWalletProvider {
   if (typeof window === 'undefined') {
     throw new Error('Wallet access is only available in the browser');
   }
 
-  const provider = (window as unknown as WalletWindow)[providerKey];
+  const provider = (window as WalletWindow)[providerWindowKey];
   if (!provider) {
     throw new Error('Wallet provider not detected in this browser');
   }
@@ -182,9 +204,11 @@ function resolveChainId(): string {
 }
 
 function resolveIntentRegistryAddress(): string {
-  const contractAddress = process.env.NEXT_PUBLIC_INTENT_REGISTRY_ADDRESS;
+  const contractAddress =
+    process.env.NEXT_PUBLIC_INTENT_REGISTRY ??
+    process.env.NEXT_PUBLIC_INTENT_REGISTRY_ADDRESS;
   if (!contractAddress) {
-    throw new Error('NEXT_PUBLIC_INTENT_REGISTRY_ADDRESS is not configured');
+    throw new Error('NEXT_PUBLIC_INTENT_REGISTRY is not configured');
   }
   return normalizeHex(contractAddress);
 }
